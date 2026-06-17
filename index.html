@@ -7,129 +7,531 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --pitch:  #0a3d1f; --gold: #f0b429; --silver: #b0b8c4; --bronze: #c07840;
-    --white:  #f5f7f2; --dim:  #8a9aa0; --card:   #0e2718;
-    --border: rgba(255,255,255,0.07); --winner: #60b97a;
+    --pitch:   #0a3d1f;
+    --card:    #0e2718;
+    --gold:    #f0b429;
+    --silver:  #b0b8c4;
+    --bronze:  #c07840;
+    --white:   #f5f7f2;
+    --dim:     #8a9aa0;
+    --border:  rgba(255,255,255,0.07);
+    --green:   #60b97a;
+    --red:     #e03434;
+    --norway:  #ef2b2d;
   }
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--pitch);color:var(--white);font-family:'Inter',sans-serif;min-height:100vh;overflow-x:hidden}
-  body::before{content:'';position:fixed;inset:0;background-image:repeating-linear-gradient(180deg,transparent 0px,transparent 48px,rgba(255,255,255,0.025) 48px,rgba(255,255,255,0.025) 96px);pointer-events:none;z-index:0}
-  .page{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:0 20px 60px}
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0 }
+  body { background:var(--pitch); color:var(--white); font-family:'Inter',sans-serif; min-height:100vh }
+  body::before { content:''; position:fixed; inset:0; background-image:repeating-linear-gradient(180deg,transparent 0px,transparent 48px,rgba(255,255,255,0.022) 48px,rgba(255,255,255,0.022) 96px); pointer-events:none; z-index:0 }
+  .page { position:relative; z-index:1; max-width:980px; margin:0 auto; padding:0 20px 80px }
 
-  header{text-align:center;padding:48px 0 36px;border-bottom:1px solid var(--border);margin-bottom:40px}
-  .tournament-label{font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
-  h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(48px,8vw,88px);line-height:.92;color:var(--white);margin-bottom:6px}
-  h1 span{color:var(--gold)}
-  .subtitle{font-size:13px;color:var(--dim);letter-spacing:.05em}
+  /* ── HEADER ── */
+  header { text-align:center; padding:48px 0 36px; border-bottom:1px solid var(--border); margin-bottom:40px }
+  .tourn-label { font-size:11px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; color:var(--gold); margin-bottom:10px }
+  h1 { font-family:'Bebas Neue',sans-serif; font-size:clamp(48px,8vw,88px); line-height:.92; margin-bottom:6px }
+  h1 span { color:var(--gold) }
+  .subtitle { font-size:13px; color:var(--dim); letter-spacing:.05em }
 
-  .section-title{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:.08em;color:var(--gold);margin-bottom:16px;display:flex;align-items:center;gap:10px}
-  .section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+  /* ── SECTION TITLE ── */
+  .section-title { font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:.08em; color:var(--gold); margin-bottom:16px; display:flex; align-items:center; gap:10px }
+  .section-title::after { content:''; flex:1; height:1px; background:var(--border) }
+  section { margin-bottom:48px }
 
-  /* LEADERBOARD */
-  .leaderboard{margin-bottom:48px}
-  .lb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
-  .lb-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 16px 14px;position:relative;overflow:hidden;transition:transform .15s,border-color .15s}
-  .lb-card:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.14)}
-  .lb-card.rank-1{border-color:var(--gold);background:linear-gradient(145deg,#1a2e10,#0e2718)}
-  .lb-card.rank-2{border-color:var(--silver)}.lb-card.rank-3{border-color:var(--bronze)}
-  .lb-rank{font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:.12em;color:var(--dim);margin-bottom:4px}
-  .lb-card.rank-1 .lb-rank{color:var(--gold)}.lb-card.rank-2 .lb-rank{color:var(--silver)}.lb-card.rank-3 .lb-rank{color:var(--bronze)}
-  .lb-name{font-weight:700;font-size:17px;margin-bottom:10px}
-  .lb-pts{font-family:'Bebas Neue',sans-serif;font-size:44px;line-height:1;margin-bottom:10px}
-  .lb-card.rank-1 .lb-pts{color:var(--gold)}
-  .lb-meta{display:flex;gap:8px;flex-wrap:wrap}
-  .lb-chip{font-size:10px;font-weight:600;padding:3px 7px;border-radius:4px;letter-spacing:.04em}
-  .chip-exact{background:rgba(240,180,41,.15);color:var(--gold)}.chip-winner{background:rgba(96,185,122,.15);color:var(--winner)}
-  .chip-wrong{background:rgba(224,52,52,.10);color:#e07070}.chip-played{background:rgba(255,255,255,.06);color:var(--dim)}
-  .lb-card.rank-1::after{content:'🏆';position:absolute;top:14px;right:14px;font-size:18px;opacity:.7}
+  /* ── LOGIN MODAL ── */
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:100; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px) }
+  .modal-bg.hidden { display:none }
+  .modal { background:#0e2718; border:1px solid var(--gold); border-radius:14px; padding:36px 32px; width:340px; text-align:center }
+  .modal h2 { font-family:'Bebas Neue',sans-serif; font-size:28px; color:var(--gold); margin-bottom:6px }
+  .modal p { font-size:13px; color:var(--dim); margin-bottom:24px }
+  .modal select, .modal input { width:100%; background:#071810; border:1px solid var(--border); color:var(--white); border-radius:8px; padding:11px 14px; font-size:14px; font-family:'Inter',sans-serif; margin-bottom:12px; outline:none }
+  .modal select:focus, .modal input:focus { border-color:var(--gold) }
+  .modal button { width:100%; background:var(--gold); color:#003; border:none; border-radius:8px; padding:12px; font-weight:700; font-size:14px; cursor:pointer; font-family:'Inter',sans-serif }
+  .modal button:hover { background:#e0a820 }
+  .modal-err { color:var(--red); font-size:12px; margin-bottom:10px; min-height:16px }
 
-  /* GAMES */
-  .games{display:flex;flex-direction:column;gap:12px}
-  .game-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-  .norway-game .game-header{border-left:3px solid #ef2b2d}
-  .game-header{display:grid;grid-template-columns:36px 1fr auto 1fr 90px;align-items:center;gap:8px;padding:14px 16px;cursor:pointer;user-select:none;transition:background .1s}
-  .game-header:hover{background:rgba(255,255,255,.03)}
-  .game-num{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--dim);text-align:center}
-  .game-team{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .team-home{text-align:right}.team-away{text-align:left}
-  .game-score{text-align:center;font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:500;min-width:56px;padding:4px 10px;border-radius:6px;background:rgba(255,255,255,.05)}
-  .game-score.has-result{background:rgba(240,180,41,.12);color:var(--gold)}.game-score.pending{color:var(--dim);font-size:13px}
-  .game-date{font-size:11px;color:var(--dim);text-align:right}
-  .norway-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(239,43,45,.15);color:#f47c7e;padding:2px 6px;border-radius:4px;margin-left:4px;vertical-align:middle}
-  .predictions{display:none;border-top:1px solid var(--border);padding:12px 16px 14px;gap:8px;flex-wrap:wrap}
-  .predictions.open{display:flex}
-  .pred-cell{flex:1;min-width:100px;background:rgba(255,255,255,.03);border-radius:7px;padding:9px 12px;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border)}
-  .pred-name{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
-  .pred-score{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:500}
-  .pred-score.no-pred{color:var(--dim);font-size:12px;font-family:'Inter',sans-serif}
-  .pred-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;width:fit-content}
-  .badge-3{background:rgba(240,180,41,.18);color:var(--gold)}.badge-1{background:rgba(96,185,122,.18);color:var(--winner)}
-  .badge-0{background:rgba(224,52,52,.12);color:#e07070}.badge-pending{background:rgba(255,255,255,.05);color:var(--dim);font-weight:500}
-  .toggle-arrow{font-size:10px;color:var(--dim);transition:transform .2s;margin-left:4px}
-  .game-card.open .toggle-arrow{transform:rotate(180deg)}
+  /* ── WHO IS LOGGED IN ── */
+  .user-bar { display:flex; align-items:center; justify-content:space-between; background:rgba(240,180,41,.08); border:1px solid rgba(240,180,41,.2); border-radius:8px; padding:10px 16px; margin-bottom:28px; font-size:13px }
+  .user-bar strong { color:var(--gold) }
+  .user-bar button { background:none; border:1px solid var(--border); color:var(--dim); border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer; font-family:'Inter',sans-serif }
+  .user-bar button:hover { border-color:var(--dim); color:var(--white) }
 
-  /* GROUPS */
-  .groups-section{margin-top:48px}
-  .groups-meta{font-size:11px;color:var(--dim);margin-bottom:14px}
-  .groups-meta a{color:var(--gold);text-decoration:none}
-  .groups-meta a:hover{text-decoration:underline}
-  .groups-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
-  .group-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-  .group-card.norway{border-color:rgba(239,43,45,.4)}
-  .group-hdr{background:#0d5228;padding:8px 14px;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.1em;color:var(--gold)}
-  .group-col-hdr{display:grid;grid-template-columns:1fr 26px 26px 26px 26px 26px 26px 30px;padding:5px 10px;background:rgba(0,0,0,.25);font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--dim)}
-  .group-col-hdr span,.group-row span{text-align:center}
-  .group-col-hdr span:first-child,.group-row span:first-child{text-align:left}
-  .group-row{display:grid;grid-template-columns:1fr 26px 26px 26px 26px 26px 26px 30px;padding:7px 10px;position:relative;border-top:1px solid var(--border);font-size:12px}
-  .group-row.qualify{background:rgba(31,122,76,.18)}.group-row.maybe{background:rgba(240,180,41,.07)}
-  .bar{position:absolute;left:0;top:0;bottom:0;width:3px}
-  .bar-green{background:#60b97a}.bar-gold{background:var(--gold)}
-  .group-row .pts{font-size:13px;font-weight:700;color:var(--gold)}
-  .group-row .pts.zero{color:var(--dim);font-weight:400}
+  /* ── LEADERBOARD ── */
+  .lb-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:10px }
+  .lb-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 16px 14px; position:relative; overflow:hidden; transition:transform .15s }
+  .lb-card:hover { transform:translateY(-2px) }
+  .lb-card.rank-1 { border-color:var(--gold); background:linear-gradient(145deg,#1a2e10,#0e2718) }
+  .lb-card.rank-2 { border-color:var(--silver) }
+  .lb-card.rank-3 { border-color:var(--bronze) }
+  .lb-rank { font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:.12em; color:var(--dim); margin-bottom:4px }
+  .lb-card.rank-1 .lb-rank { color:var(--gold) }
+  .lb-card.rank-2 .lb-rank { color:var(--silver) }
+  .lb-card.rank-3 .lb-rank { color:var(--bronze) }
+  .lb-name { font-weight:700; font-size:17px; margin-bottom:10px }
+  .lb-pts { font-family:'Bebas Neue',sans-serif; font-size:44px; line-height:1; margin-bottom:10px }
+  .lb-card.rank-1 .lb-pts { color:var(--gold) }
+  .lb-meta { display:flex; gap:6px; flex-wrap:wrap }
+  .chip { font-size:10px; font-weight:600; padding:3px 7px; border-radius:4px }
+  .chip-exact  { background:rgba(240,180,41,.15); color:var(--gold) }
+  .chip-win    { background:rgba(96,185,122,.15);  color:var(--green) }
+  .chip-wrong  { background:rgba(224,52,52,.10);   color:#e07070 }
+  .chip-played { background:rgba(255,255,255,.06); color:var(--dim) }
+  .lb-card.rank-1::after { content:'🏆'; position:absolute; top:14px; right:14px; font-size:18px; opacity:.7 }
 
-  @media(max-width:600px){
-    .game-header{grid-template-columns:28px 1fr auto 1fr 60px;gap:5px;padding:12px}
-    .game-team{font-size:12px}.pred-cell{min-width:80px}
-    .groups-grid{grid-template-columns:1fr}
+  /* ── GAMES ── */
+  .games-list { display:flex; flex-direction:column; gap:10px }
+  .game-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden }
+  .game-card.norway-game { border-left:3px solid var(--norway) }
+  .game-header { display:grid; grid-template-columns:32px 1fr auto 1fr auto; align-items:center; gap:8px; padding:13px 16px; cursor:pointer; user-select:none }
+  .game-header:hover { background:rgba(255,255,255,.025) }
+  .gnum { font-family:'Bebas Neue',sans-serif; font-size:17px; color:var(--dim); text-align:center }
+  .gteam { font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .gteam.home { text-align:right }
+  .gscore { font-family:'JetBrains Mono',monospace; font-size:17px; min-width:54px; text-align:center; padding:4px 8px; border-radius:6px; background:rgba(255,255,255,.05) }
+  .gscore.done { background:rgba(240,180,41,.12); color:var(--gold) }
+  .gscore.live { background:rgba(96,185,122,.15); color:var(--green); animation:pulse 2s infinite }
+  .gscore.pending { color:var(--dim); font-size:12px }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+  .gmeta { font-size:10px; color:var(--dim); text-align:right; line-height:1.5 }
+  .lock-badge { font-size:9px; font-weight:700; letter-spacing:.05em; padding:2px 5px; border-radius:3px; background:rgba(224,52,52,.15); color:#e07070 }
+  .open-badge { font-size:9px; font-weight:700; letter-spacing:.05em; padding:2px 5px; border-radius:3px; background:rgba(96,185,122,.15); color:var(--green) }
+  .norway-badge { font-size:10px; font-weight:700; background:rgba(239,43,45,.15); color:#f47c7e; padding:2px 6px; border-radius:4px; margin-left:4px; vertical-align:middle }
+
+  /* ── PREDICTIONS PANEL ── */
+  .pred-panel { display:none; border-top:1px solid var(--border); padding:14px 16px }
+  .pred-panel.open { display:block }
+  .pred-grid { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
+  .pred-cell { flex:1; min-width:90px; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:7px; padding:9px 11px }
+  .pred-cell-name { font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--dim); margin-bottom:5px }
+  .pred-cell-score { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:500 }
+  .pred-cell-score.empty { color:var(--dim); font-size:11px; font-family:'Inter',sans-serif }
+  .pred-badge { display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; margin-top:4px }
+  .pb-3 { background:rgba(240,180,41,.18); color:var(--gold) }
+  .pb-1 { background:rgba(96,185,122,.18); color:var(--green) }
+  .pb-0 { background:rgba(224,52,52,.12); color:#e07070 }
+  .pb-p { background:rgba(255,255,255,.05); color:var(--dim) }
+
+  /* ── PREDICTION INPUT ── */
+  .pred-input-row { display:flex; gap:8px; align-items:center; padding-top:10px; border-top:1px solid var(--border) }
+  .pred-input-row label { font-size:12px; color:var(--dim); white-space:nowrap }
+  .pred-input-row input { flex:1; background:#071810; border:1px solid var(--border); color:var(--white); border-radius:7px; padding:9px 12px; font-family:'JetBrains Mono',monospace; font-size:14px; outline:none; max-width:120px }
+  .pred-input-row input:focus { border-color:var(--gold) }
+  .pred-input-row input:disabled { opacity:.4; cursor:not-allowed }
+  .pred-input-row button { background:var(--gold); color:#003; border:none; border-radius:7px; padding:9px 18px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; font-family:'Inter',sans-serif }
+  .pred-input-row button:disabled { opacity:.4; cursor:not-allowed }
+  .pred-input-row .locked-msg { font-size:11px; color:#e07070; font-style:italic }
+  .save-msg { font-size:11px; color:var(--green); margin-left:6px; opacity:0; transition:opacity .3s }
+  .save-msg.show { opacity:1 }
+
+  /* ── GROUPS ── */
+  .groups-meta { font-size:11px; color:var(--dim); margin-bottom:14px }
+  .groups-meta a { color:var(--gold); text-decoration:none }
+  .groups-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(295px,1fr)); gap:12px }
+  .group-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden }
+  .group-card.norway { border-color:rgba(239,43,45,.4) }
+  .group-hdr { background:#0d5228; padding:8px 14px; font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:.1em; color:var(--gold) }
+  .group-col-hdr { display:grid; grid-template-columns:1fr 26px 26px 26px 26px 26px 26px 30px; padding:5px 10px; background:rgba(0,0,0,.25); font-size:10px; font-weight:700; letter-spacing:.06em; color:var(--dim) }
+  .group-col-hdr span,.group-row span { text-align:center }
+  .group-col-hdr span:first-child,.group-row span:first-child { text-align:left }
+  .group-row { display:grid; grid-template-columns:1fr 26px 26px 26px 26px 26px 26px 30px; padding:6px 10px; position:relative; border-top:1px solid var(--border); font-size:12px }
+  .group-row.qualify { background:rgba(31,122,76,.18) }
+  .group-row.maybe   { background:rgba(240,180,41,.07) }
+  .qbar { position:absolute; left:0; top:0; bottom:0; width:3px }
+  .qbar-g { background:var(--green) }
+  .qbar-y { background:var(--gold) }
+  .gpts { font-size:13px; font-weight:700; color:var(--gold) }
+  .gpts.zero { color:var(--dim); font-weight:400 }
+
+  /* ── BRACKET ── */
+  #bracket-wrap { overflow-x:auto; padding-bottom:16px }
+
+  /* ── ADMIN ── */
+  .admin-section { background:rgba(240,180,41,.05); border:1px solid rgba(240,180,41,.2); border-radius:10px; padding:20px }
+  .admin-grid { display:flex; flex-direction:column; gap:10px }
+  .admin-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
+  .admin-row select, .admin-row input { background:#071810; border:1px solid var(--border); color:var(--white); border-radius:7px; padding:9px 12px; font-size:13px; font-family:'JetBrains Mono',monospace; outline:none }
+  .admin-row select:focus, .admin-row input:focus { border-color:var(--gold) }
+  .admin-row button { background:var(--gold); color:#003; border:none; border-radius:7px; padding:9px 18px; font-weight:700; font-size:13px; cursor:pointer; font-family:'Inter',sans-serif }
+  .admin-note { font-size:11px; color:var(--dim); margin-top:8px }
+
+  @media(max-width:600px) {
+    .game-header { grid-template-columns:26px 1fr auto 1fr auto; gap:5px; padding:11px 12px }
+    .gteam { font-size:12px }
+    .pred-cell { min-width:75px }
   }
 </style>
 </head>
 <body>
+
+<!-- LOGIN MODAL -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <div style="font-size:32px;margin-bottom:8px">⚽</div>
+    <h2>Sign In</h2>
+    <p>Pick your name and enter your PIN to submit predictions</p>
+    <select id="login-name">
+      <option value="">Select your name…</option>
+      <option>Eivind</option>
+      <option>Mari</option>
+      <option>Benny</option>
+      <option>Martin</option>
+      <option>TJ</option>
+    </select>
+    <input type="password" id="login-pin" placeholder="PIN" maxlength="10" inputmode="numeric">
+    <div class="modal-err" id="login-err"></div>
+    <button onclick="doLogin()">Sign In</button>
+    <div style="margin-top:14px;font-size:11px;color:var(--dim)">Just want to watch? <a href="#" onclick="closeModal()" style="color:var(--gold)">Browse as guest</a></div>
+  </div>
+</div>
+
 <div class="page">
 
 <header>
-  <div class="tournament-label">FIFA World Cup 2026</div>
+  <div class="tourn-label">FIFA World Cup 2026</div>
   <h1>Prediction <span>League</span></h1>
   <div class="subtitle">Eivind · Mari · Benny · Martin · TJ</div>
 </header>
 
-<section class="leaderboard">
+<div id="user-bar-wrap"></div>
+
+<!-- LEADERBOARD -->
+<section>
   <div class="section-title">Standings</div>
-  <div class="lb-grid" id="lb-grid"></div>
+  <div class="lb-grid" id="lb-grid"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
 </section>
 
-<section style="margin-bottom:48px">
+<!-- GAMES -->
+<section>
   <div class="section-title">Games</div>
-  <div class="games" id="games-list"></div>
+  <div class="games-list" id="games-list"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
 </section>
 
-<section class="groups-section">
+<!-- GROUP STANDINGS -->
+<section>
   <div class="section-title">Group Stage</div>
-  <div class="groups-meta">Standings updated 17 Jun · Matchday 1 complete for groups A–J · K & L play today · Source: <a href="https://www.cbssports.com/soccer/news/world-cup-group-standings-table-results/" target="_blank">CBS Sports</a> / <a href="https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/standings" target="_blank">FIFA</a> · 🟢 qualifies automatically · 🟡 possible best 3rd place</div>
+  <div class="groups-meta">Updated 17 Jun · Source: <a href="https://www.cbssports.com/soccer/news/world-cup-group-standings-table-results/" target="_blank">CBS Sports</a> / <a href="https://www.fifa.com" target="_blank">FIFA</a> · 🟢 qualifies · 🟡 possible 3rd</div>
   <div class="groups-grid" id="groups-grid"></div>
 </section>
 
+<!-- BRACKET -->
+<section>
+  <div class="section-title">Knockout Bracket</div>
+  <div style="font-size:11px;color:var(--dim);margin-bottom:16px">Group stage ends 27 Jun · Round of 32 starts 28 Jun · Final 19 Jul · MetLife Stadium</div>
+  <div id="bracket-wrap"><div id="bracket"></div></div>
+</section>
+
+<!-- ADMIN -->
+<section id="admin-section" style="display:none">
+  <div class="section-title">Admin — Enter Results</div>
+  <div class="admin-section">
+    <div class="admin-grid">
+      <div class="admin-row">
+        <select id="admin-game-sel"></select>
+        <input type="text" id="admin-result-inp" placeholder="e.g. 2-1" maxlength="6" style="width:100px">
+        <button onclick="saveResult()">Save Result</button>
+        <span id="admin-msg" style="font-size:12px;color:var(--green)"></span>
+      </div>
+    </div>
+    <div class="admin-note">⚠️ Only TJ can save results. Results auto-calculate everyone's points.</div>
+  </div>
+</section>
+
 </div>
+
 <script>
+// ── CONFIG ───────────────────────────────────────────────────────────────────
+const SB_URL = 'https://hsanauyxexbyefmefhcd.supabase.co';
+const SB_KEY = 'sb_publishable_9e7wqC6DzRopGH9jy9obqw_MJ_LkNgT';
+const ADMIN  = 'TJ';
 const CONTENDERS = ['Eivind','Mari','Benny','Martin','TJ'];
-const rankLabel  = ['🥇 1st','🥈 2nd','🥉 3rd','4th','5th'];
-const rankClass  = ['rank-1','rank-2','rank-3','rank-4','rank-5'];
+const NORWAY_LC  = ['norway','iraq']; // games involving norway
 
-const DATA = {"games":[{"id":1,"date":"11 Jun","home":"Mexico","away":"South Africa","result":"2-0","predictions":{"Eivind":{"pred":"2-0","pts":3},"Mari":{"pred":"2-1","pts":1},"Benny":{"pred":"pass","pts":0},"Martin":{"pred":"1-2","pts":0},"TJ":{"pred":"2-0","pts":3}}},{"id":2,"date":"12 Jun","home":"Canada","away":"Bosnia-Hertzegovina","result":"1-1","predictions":{"Eivind":{"pred":"2-1","pts":0},"Mari":{"pred":"3-1","pts":0},"Benny":{"pred":"pass","pts":0},"Martin":{"pred":"2-1","pts":0},"TJ":{"pred":"1-0","pts":0}}},{"id":3,"date":"13 Jun","home":"Brazil","away":"Morocco","result":"1-1","predictions":{"Eivind":{"pred":"2-2","pts":1},"Mari":{"pred":"2-1","pts":0},"Benny":{"pred":"1-2","pts":0},"Martin":{"pred":"3-1","pts":0},"TJ":{"pred":"2-1","pts":0}}},{"id":4,"date":"14 Jun","home":"Netherlands","away":"Japan","result":"2-2","predictions":{"Eivind":{"pred":"2-0","pts":0},"Mari":{"pred":"2-1","pts":0},"Benny":{"pred":"0-1","pts":0},"Martin":{"pred":"2-1","pts":0},"TJ":{"pred":"1-1","pts":1}}},{"id":5,"date":"15 Jun","home":"Belgium","away":"Egypt","result":"1-1","predictions":{"Eivind":{"pred":"3-1","pts":0},"Mari":{"pred":"3-1","pts":0},"Benny":{"pred":"pass","pts":0},"Martin":{"pred":"2-0","pts":0},"TJ":{"pred":"2-1","pts":0}}},{"id":6,"date":"16 Jun","home":"Iraq","away":"Norway","result":"1-4","predictions":{"Eivind":{"pred":"1-3","pts":1},"Mari":{"pred":"1-3","pts":1},"Benny":{"pred":"1-3","pts":1},"Martin":{"pred":"0-3","pts":1},"TJ":{"pred":"0-2","pts":1}}},{"id":7,"date":"17 Jun","home":"England","away":"Croatia","result":null,"predictions":{"Eivind":{"pred":null,"pts":null},"Mari":{"pred":null,"pts":null},"Benny":{"pred":null,"pts":null},"Martin":{"pred":null,"pts":null},"TJ":{"pred":null,"pts":null}}},{"id":8,"date":"18 Jun","home":"Mexico","away":"Korea Republic","result":null,"predictions":{"Eivind":{"pred":null,"pts":null},"Mari":{"pred":null,"pts":null},"Benny":{"pred":null,"pts":null},"Martin":{"pred":null,"pts":null},"TJ":{"pred":null,"pts":null}}},{"id":9,"date":"19 Jun","home":"Usa","away":"Australia","result":null,"predictions":{"Eivind":{"pred":null,"pts":null},"Mari":{"pred":null,"pts":null},"Benny":{"pred":null,"pts":null},"Martin":{"pred":null,"pts":null},"TJ":{"pred":null,"pts":null}}},{"id":10,"date":"20 Jun","home":"Germay","away":"C\u00f6te d`Ivoire","result":null,"predictions":{"Eivind":{"pred":null,"pts":null},"Mari":{"pred":null,"pts":null},"Benny":{"pred":null,"pts":null},"Martin":{"pred":null,"pts":null},"TJ":{"pred":null,"pts":null}}},{"id":11,"date":"21 Jun","home":"Spain","away":"Saudi Arabia","result":null,"predictions":{"Eivind":{"pred":null,"pts":null},"Mari":{"pred":null,"pts":null},"Benny":{"pred":null,"pts":null},"Martin":{"pred":null,"pts":null},"TJ":{"pred":null,"pts":null}}},{"id":12,"date":"22 Jun","home":"Norway","away":"Senegal","result":null,"predictions":{"Eivind":{"pred":null,"pts":null},"Mari":{"pred":null,"pts":null},"Benny":{"pred":null,"pts":null},"Martin":{"pred":null,"pts":null},"TJ":{"pred":null,"pts":null}}},{"id":13,"date":"23 Jun","home":"England","away":"Ghana","result":null,"predictions":{"Eivind":{"pred":null,"pts":null},"Mari":{"pred":null,"pts":null},"Benny":{"pred":null,"pts":null},"Martin":{"pred":null,"pts":null},"TJ":{"pred":null,"pts":null}}},{"id":14,"date":"24 Jun","home":"Scotland","away":"Brazil","result":null,"predictions":{"Eivind":{"pred":null,"pts":null},"Mari":{"pred":null,"pts":null},"Benny":{"pred":null,"pts":null},"Martin":{"pred":null,"pts":null},"TJ":{"pred":null,"pts":null}}},{"id":15,"date":"25 Jun","home":"Ecuador","away":"Germany","result":null,"predictions":{"Eivind":{"pred":null,"pts":null},"Mari":{"pred":null,"pts":null},"Benny":{"pred":null,"pts":null},"Martin":{"pred":null,"pts":null},"TJ":{"pred":null,"pts":null}}},{"id":16,"date":"26 Jun","home":"Norway","away":"France","result":null,"predictions":{"Eivind":{"pred":null,"pts":null},"Mari":{"pred":null,"pts":null},"Benny":{"pred":null,"pts":null},"Martin":{"pred":null,"pts":null},"TJ":{"pred":null,"pts":null}}}],"leaderboard":[["Eivind",{"pts":5,"exact":1,"winner":2,"wrong":3,"played":6}],["TJ",{"pts":5,"exact":1,"winner":2,"wrong":3,"played":6}],["Mari",{"pts":2,"exact":0,"winner":2,"wrong":4,"played":6}],["Benny",{"pts":1,"exact":0,"winner":1,"wrong":5,"played":6}],["Martin",{"pts":1,"exact":0,"winner":1,"wrong":5,"played":6}]]};
+// ── STATE ────────────────────────────────────────────────────────────────────
+let currentUser = localStorage.getItem('wc_user') || null;
+let allGames = [], allPredictions = [], allParticipants = [];
 
-// Group standings — verified 17 Jun from FIFA/ESPN/CBS Sports
-// All Matchday 1 results now complete across all 12 groups
-// Groups K & L play their first games today (17 Jun)
+// ── SUPABASE FETCH ────────────────────────────────────────────────────────────
+async function sb(path, opts={}) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${SB_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...opts.headers
+    },
+    ...opts
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const txt = await res.text();
+  return txt ? JSON.parse(txt) : null;
+}
+
+// ── SCORING ──────────────────────────────────────────────────────────────────
+function calcPts(result, pred) {
+  if (!result || !pred) return null;
+  if (result === pred) return 3;
+  try {
+    const [rh,ra] = result.split('-').map(Number);
+    const [ph,pa] = pred.split('-').map(Number);
+    const sign = x => x>0?1:x<0?-1:0;
+    if (sign(rh-ra) === sign(ph-pa)) return 1;
+  } catch(e) {}
+  return 0;
+}
+
+function buildLeaderboard(games, predictions) {
+  const totals = {};
+  CONTENDERS.forEach(n => totals[n] = {pts:0,exact:0,winner:0,wrong:0,played:0});
+  games.forEach(g => {
+    if (!g.result) return;
+    CONTENDERS.forEach(n => {
+      const p = predictions.find(p => p.game_id===g.id && p.participant===n);
+      const pts = calcPts(g.result, p?.prediction);
+      if (pts !== null) {
+        totals[n].pts += pts;
+        totals[n].played++;
+        if (pts===3) totals[n].exact++;
+        else if (pts===1) totals[n].winner++;
+        else totals[n].wrong++;
+      }
+    });
+  });
+  return Object.entries(totals).sort((a,b) => b[1].pts - a[1].pts);
+}
+
+// ── LOGIN ────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const name = document.getElementById('login-name').value;
+  const pin  = document.getElementById('login-pin').value;
+  const err  = document.getElementById('login-err');
+  if (!name) { err.textContent = 'Please select your name.'; return; }
+  if (!pin)  { err.textContent = 'Please enter your PIN.'; return; }
+  try {
+    const rows = await sb(`participants?name=eq.${encodeURIComponent(name)}&pin=eq.${encodeURIComponent(pin)}&select=name`);
+    if (!rows || rows.length === 0) { err.textContent = 'Wrong PIN — try again.'; return; }
+    currentUser = name;
+    localStorage.setItem('wc_user', name);
+    closeModal();
+    renderUserBar();
+    renderGames();
+  } catch(e) { err.textContent = 'Error checking PIN. Try again.'; }
+}
+
+function closeModal() {
+  document.getElementById('modal-bg').classList.add('hidden');
+}
+
+function logout() {
+  currentUser = null;
+  localStorage.removeItem('wc_user');
+  document.getElementById('user-bar-wrap').innerHTML = '';
+  document.getElementById('admin-section').style.display = 'none';
+  renderGames();
+}
+
+function renderUserBar() {
+  if (!currentUser) return;
+  document.getElementById('user-bar-wrap').innerHTML = `
+    <div class="user-bar">
+      <span>Signed in as <strong>${currentUser}</strong> — you can now submit predictions</span>
+      <button onclick="logout()">Sign out</button>
+    </div>`;
+  if (currentUser === ADMIN) {
+    document.getElementById('admin-section').style.display = 'block';
+    populateAdminSelect();
+  }
+}
+
+// Auto-close modal if already logged in
+if (currentUser) closeModal();
+
+// ── LOAD DATA ─────────────────────────────────────────────────────────────────
+async function loadAll() {
+  try {
+    [allGames, allPredictions] = await Promise.all([
+      sb('games?select=*&order=id'),
+      sb('predictions?select=*')
+    ]);
+    renderLeaderboard();
+    renderGames();
+    if (currentUser) renderUserBar();
+  } catch(e) {
+    console.error('Load error', e);
+  }
+}
+
+// ── LEADERBOARD ───────────────────────────────────────────────────────────────
+function renderLeaderboard() {
+  const grid = document.getElementById('lb-grid');
+  const lb = buildLeaderboard(allGames, allPredictions);
+  const rankLabel = ['🥇 1st','🥈 2nd','🥉 3rd','4th','5th'];
+  const rankClass = ['rank-1','rank-2','rank-3','rank-4','rank-5'];
+  grid.innerHTML = lb.map(([name, s], i) => `
+    <div class="lb-card ${rankClass[i]||''}">
+      <div class="lb-rank">${rankLabel[i]||''}</div>
+      <div class="lb-name">${name}</div>
+      <div class="lb-pts">${s.pts}</div>
+      <div class="lb-meta">
+        ${s.exact  ? `<span class="chip chip-exact">${s.exact}× exact</span>` : ''}
+        ${s.winner ? `<span class="chip chip-win">${s.winner}× winner</span>` : ''}
+        ${s.wrong  ? `<span class="chip chip-wrong">${s.wrong}× miss</span>` : ''}
+        <span class="chip chip-played">${s.played} played</span>
+      </div>
+    </div>`).join('');
+}
+
+// ── GAMES ─────────────────────────────────────────────────────────────────────
+function isNorwayGame(g) {
+  return [g.home, g.away].some(t => NORWAY_LC.includes(t.toLowerCase()));
+}
+
+function isLocked(g) {
+  return new Date() >= new Date(g.kickoff);
+}
+
+function badgeHtml(pts) {
+  if (pts===null) return `<span class="pred-badge pb-p">Pending</span>`;
+  if (pts===3)   return `<span class="pred-badge pb-3">⚽ 3 pts</span>`;
+  if (pts===1)   return `<span class="pred-badge pb-1">✓ 1 pt</span>`;
+  return `<span class="pred-badge pb-0">✗ 0 pts</span>`;
+}
+
+function renderGames() {
+  const list = document.getElementById('games-list');
+  list.innerHTML = allGames.map(g => {
+    const locked = isLocked(g);
+    const norway = isNorwayGame(g);
+    const kickoff = new Date(g.kickoff);
+    const dateStr = kickoff.toLocaleDateString('no-NO',{day:'numeric',month:'short'});
+    const timeStr = kickoff.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'});
+
+    const predsHtml = CONTENDERS.map(name => {
+      const p = allPredictions.find(p => p.game_id===g.id && p.participant===name);
+      const pts = calcPts(g.result, p?.prediction);
+      return `<div class="pred-cell">
+        <div class="pred-cell-name">${name}</div>
+        ${p?.prediction
+          ? `<div class="pred-cell-score">${p.prediction}</div>`
+          : `<div class="pred-cell-score empty">—</div>`}
+        ${g.result ? badgeHtml(pts) : (p ? `<span class="pred-badge pb-p">Tipped</span>` : '')}
+      </div>`;
+    }).join('');
+
+    // Input row for current user
+    let inputHtml = '';
+    if (currentUser) {
+      const myPred = allPredictions.find(p => p.game_id===g.id && p.participant===currentUser);
+      if (locked) {
+        inputHtml = `<div class="pred-input-row"><span class="locked-msg">🔒 Predictions locked — game has started</span></div>`;
+      } else {
+        inputHtml = `<div class="pred-input-row">
+          <label>Your tip:</label>
+          <input type="text" id="inp-${g.id}" placeholder="e.g. 2-1" maxlength="6"
+            value="${myPred?.prediction||''}" style="font-size:14px">
+          <button onclick="savePrediction(${g.id})">Save</button>
+          <span class="save-msg" id="msg-${g.id}">Saved ✓</span>
+        </div>`;
+      }
+    }
+
+    const homeLabel = g.home + (g.home.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
+    const awayLabel = g.away + (g.away.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
+
+    return `<div class="game-card${norway?' norway-game':''}">
+      <div class="game-header" onclick="toggleGame(${g.id})">
+        <div class="gnum">${g.id}</div>
+        <div class="gteam home">${homeLabel}</div>
+        <div class="gscore ${g.result?'done':'pending'}">${g.result||'vs'}</div>
+        <div class="gteam">${awayLabel}</div>
+        <div class="gmeta">
+          ${dateStr} ${timeStr}<br>
+          ${locked ? '<span class="lock-badge">LOCKED</span>' : '<span class="open-badge">OPEN</span>'}
+        </div>
+      </div>
+      <div class="pred-panel" id="panel-${g.id}">
+        <div class="pred-grid">${predsHtml}</div>
+        ${inputHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleGame(id) {
+  const panel = document.getElementById(`panel-${id}`);
+  panel.classList.toggle('open');
+}
+
+// ── SAVE PREDICTION ────────────────────────────────────────────────────────────
+async function savePrediction(gameId) {
+  if (!currentUser) return;
+  const inp = document.getElementById(`inp-${gameId}`);
+  const msg = document.getElementById(`msg-${gameId}`);
+  const pred = inp.value.trim();
+  if (!pred) return;
+
+  inp.disabled = true;
+  try {
+    await sb('predictions', {
+      method: 'POST',
+      headers: { 'Prefer': 'resolution=merge-duplicates' },
+      body: JSON.stringify({ game_id: gameId, participant: currentUser, prediction: pred })
+    });
+    // Update local state
+    const idx = allPredictions.findIndex(p => p.game_id===gameId && p.participant===currentUser);
+    if (idx >= 0) allPredictions[idx].prediction = pred;
+    else allPredictions.push({ game_id: gameId, participant: currentUser, prediction: pred });
+
+    msg.classList.add('show');
+    setTimeout(() => msg.classList.remove('show'), 2500);
+    renderLeaderboard();
+    renderGames();
+    // Re-open the panel
+    setTimeout(() => {
+      const panel = document.getElementById(`panel-${gameId}`);
+      if (panel) panel.classList.add('open');
+    }, 50);
+  } catch(e) {
+    msg.textContent = 'Error saving';
+    msg.style.color = 'var(--red)';
+    msg.classList.add('show');
+  } finally {
+    inp.disabled = false;
+  }
+}
+
+// ── ADMIN — SAVE RESULT ───────────────────────────────────────────────────────
+function populateAdminSelect() {
+  const sel = document.getElementById('admin-game-sel');
+  sel.innerHTML = allGames.map(g =>
+    `<option value="${g.id}">#${g.id} ${g.home} vs ${g.away}${g.result?' ('+g.result+')':''}</option>`
+  ).join('');
+}
+
+async function saveResult() {
+  if (currentUser !== ADMIN) return;
+  const gameId = parseInt(document.getElementById('admin-game-sel').value);
+  const result = document.getElementById('admin-result-inp').value.trim();
+  const msg    = document.getElementById('admin-msg');
+  if (!result) return;
+
+  try {
+    await sb(`games?id=eq.${gameId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ result })
+    });
+    const g = allGames.find(g => g.id===gameId);
+    if (g) g.result = result;
+    msg.textContent = 'Saved ✓';
+    setTimeout(() => msg.textContent = '', 2500);
+    populateAdminSelect();
+    renderLeaderboard();
+    renderGames();
+  } catch(e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.style.color = 'var(--red)';
+  }
+}
+
+// ── GROUP STANDINGS ────────────────────────────────────────────────────────────
 const GROUPS = {
   A:[['Mexico',1,1,0,0,2,0,3],['South Korea',1,1,0,0,2,1,3],['Czechia',1,0,0,1,1,2,0],['South Africa',1,0,0,1,0,2,0]],
   B:[['Canada',1,0,1,0,1,1,1],['Bosnia & Herz.',1,0,1,0,1,1,1],['Qatar',1,0,1,0,1,1,1],['Switzerland',1,0,1,0,1,1,1]],
@@ -145,384 +547,165 @@ const GROUPS = {
   L:[['England',0,0,0,0,0,0,0],['Croatia',0,0,0,0,0,0,0],['Ghana',0,0,0,0,0,0,0],['Panama',0,0,0,0,0,0,0]]
 };
 
-// ── LEADERBOARD ──────────────────────────────────────────────────────────────
-function buildLeaderboard() {
-  const grid = document.getElementById('lb-grid');
-  DATA.leaderboard.forEach(([name, s], i) => {
-    const card = document.createElement('div');
-    card.className = `lb-card ${rankClass[i]||''}`;
-    card.innerHTML = `
-      <div class="lb-rank">${rankLabel[i]||(i+1)+'th'}</div>
-      <div class="lb-name">${name}</div>
-      <div class="lb-pts">${s.pts}</div>
-      <div class="lb-meta">
-        ${s.exact  ? `<span class="lb-chip chip-exact">${s.exact}× exact</span>` : ''}
-        ${s.winner ? `<span class="lb-chip chip-winner">${s.winner}× winner</span>` : ''}
-        ${s.wrong  ? `<span class="lb-chip chip-wrong">${s.wrong}× miss</span>` : ''}
-        <span class="lb-chip chip-played">${s.played} played</span>
-      </div>`;
-    grid.appendChild(card);
-  });
-}
-
-// ── GAMES ────────────────────────────────────────────────────────────────────
-function badgeHtml(pts) {
-  if (pts===null)  return `<span class="pred-badge badge-pending">Pending</span>`;
-  if (pts===3)     return `<span class="pred-badge badge-3">⚽ 3 pts</span>`;
-  if (pts===1)     return `<span class="pred-badge badge-1">✓ 1 pt</span>`;
-  return `<span class="pred-badge badge-0">✗ 0 pts</span>`;
-}
-
-function buildGames() {
-  const list = document.getElementById('games-list');
-  DATA.games.forEach(g => {
-    const hasResult = !!g.result;
-    const norway = ['norway'].some(n => g.home.toLowerCase()===n || g.away.toLowerCase()===n);
-    const card = document.createElement('div');
-    card.className = `game-card${norway?' norway-game':''}`;
-    const norwayBadge = '<span class="norway-badge">🇳🇴</span>';
-    const homeLabel = g.home + (norway && g.home.toLowerCase()==='norway' ? norwayBadge : '');
-    const awayLabel = g.away + (norway && g.away.toLowerCase()==='norway' ? norwayBadge : '');
-    const predsHtml = CONTENDERS.map(name => {
-      const p = g.predictions[name];
-      return `<div class="pred-cell">
-        <div class="pred-name">${name}</div>
-        ${p&&p.pred ? `<div class="pred-score">${p.pred}</div>` : `<div class="pred-score no-pred">—</div>`}
-        ${badgeHtml(p ? p.pts : null)}
-      </div>`;
-    }).join('');
-    card.innerHTML = `
-      <div class="game-header">
-        <div class="game-num">${g.id}</div>
-        <div class="game-team team-home">${homeLabel}</div>
-        <div class="game-score ${hasResult?'has-result':'pending'}">${hasResult?g.result:'vs'}</div>
-        <div class="game-team team-away">${awayLabel}</div>
-        <div class="game-date">${g.date} <span class="toggle-arrow">▼</span></div>
-      </div>
-      <div class="predictions">${predsHtml}</div>`;
-    card.querySelector('.game-header').addEventListener('click', () => {
-      const p = card.querySelector('.predictions');
-      card.classList.toggle('open', p.classList.toggle('open'));
-    });
-    list.appendChild(card);
-  });
-}
-
-// ── GROUP STANDINGS ──────────────────────────────────────────────────────────
-function buildGroups() {
+function renderGroups() {
   const grid = document.getElementById('groups-grid');
-  const NORWAY_LC = ['norway'];
-
-  Object.entries(GROUPS).forEach(([letter, teams]) => {
-    // Sort: pts desc, GD desc, GF desc
-    const sorted = [...teams].sort((a,b) => b[7]-a[7] || (b[5]-b[6])-(a[5]-a[6]) || b[5]-a[5]);
-    const isNorwayGroup = sorted.some(t => NORWAY_LC.includes(t[0].toLowerCase()));
-
-    const card = document.createElement('div');
-    card.className = `group-card${isNorwayGroup?' norway':''}`;
-
-    const hdr = document.createElement('div');
-    hdr.className = 'group-hdr';
-    hdr.innerHTML = `Group ${letter}${isNorwayGroup ? ' 🇳🇴' : ''}`;
-    card.appendChild(hdr);
-
-    const colHdr = document.createElement('div');
-    colHdr.className = 'group-col-hdr';
-    colHdr.innerHTML = '<span style="padding-left:12px">Team</span><span>P</span><span>W</span><span>D</span><span>L</span><span>GF</span><span>GA</span><span>Pts</span>';
-    card.appendChild(colHdr);
-
-    sorted.forEach(([name,pld,w,d,l,gf,ga,pts], i) => {
-      const gd = gf - ga;
-      const isNorway = NORWAY_LC.includes(name.toLowerCase());
-      let cls = 'group-row';
-      let bar = '';
-      if (i < 2 && pld > 0) { cls += ' qualify'; bar = '<span class="bar bar-green"></span>'; }
-      else if (i === 2 && pld > 0) { cls += ' maybe'; bar = '<span class="bar bar-gold"></span>'; }
-
-      const row = document.createElement('div');
-      row.className = cls;
-      row.innerHTML = `${bar}
-        <span style="padding-left:12px;font-weight:${isNorway?700:400}">${name}${isNorway?' 🇳🇴':''}</span>
-        <span style="color:var(--dim)">${pld}</span>
-        <span style="color:var(--dim)">${w}</span>
-        <span style="color:var(--dim)">${d}</span>
-        <span style="color:var(--dim)">${l}</span>
-        <span style="color:var(--dim)">${gf}</span>
-        <span style="color:var(--dim)">${ga}</span>
-        <span class="pts${pts===0?' zero':''}">${pts}</span>`;
-      card.appendChild(row);
-    });
-
-    grid.appendChild(card);
-  });
+  grid.innerHTML = Object.entries(GROUPS).map(([letter, teams]) => {
+    const sorted = [...teams].sort((a,b) => b[7]-a[7]||(b[5]-b[6])-(a[5]-a[6])||b[5]-a[5]);
+    const isNorway = sorted.some(t => t[0].toLowerCase()==='norway');
+    return `<div class="group-card${isNorway?' norway':''}">
+      <div class="group-hdr">Group ${letter}${isNorway?' 🇳🇴':''}</div>
+      <div class="group-col-hdr"><span style="padding-left:10px">Team</span><span>P</span><span>W</span><span>D</span><span>L</span><span>GF</span><span>GA</span><span>Pts</span></div>
+      ${sorted.map(([name,pld,w,d,l,gf,ga,pts],i) => {
+        const isNor = name.toLowerCase()==='norway';
+        let cls='group-row', bar='';
+        if (i<2&&pld>0){cls+=' qualify';bar='<span class="qbar qbar-g"></span>';}
+        else if (i===2&&pld>0){cls+=' maybe';bar='<span class="qbar qbar-y"></span>';}
+        return `<div class="${cls}">${bar}
+          <span style="padding-left:10px;font-weight:${isNor?700:400}">${name}${isNor?' 🇳🇴':''}</span>
+          <span style="color:var(--dim)">${pld}</span><span style="color:var(--dim)">${w}</span>
+          <span style="color:var(--dim)">${d}</span><span style="color:var(--dim)">${l}</span>
+          <span style="color:var(--dim)">${gf}</span><span style="color:var(--dim)">${ga}</span>
+          <span class="gpts${pts===0?' zero':''}">${pts}</span></div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
 }
 
-buildLeaderboard();
-buildGames();
-buildGroups();
-</script>
-
-  <section style="margin-top:48px">
-    <div class="section-title">Knockout Bracket</div>
-    <div style="font-size:11px;color:var(--dim);margin-bottom:16px">
-      Group stage ends 27 Jun · Round of 32 starts 28 Jun · Final 19 Jul at MetLife Stadium
-    </div>
-    <div id="bracket-wrap" style="overflow-x:auto;padding-bottom:16px">
-      <div id="bracket"></div>
-    </div>
-  </section>
-
-<script>
-// ── BRACKET ──────────────────────────────────────────────────────────────────
-// Official R32 matchups from FIFA/Wikipedia (matches 73-88)
-// TBD slots will fill as group stage completes
-
+// ── BRACKET ───────────────────────────────────────────────────────────────────
 const R32 = [
-  // Each match: [top_label, top_team, bot_label, bot_team, date]
-  ['2nd A', 'TBD', '2nd B', 'TBD', '28 Jun'],
-  ['1st E', 'TBD', '3rd A/B/C/D/F', 'TBD', '28 Jun'],
-  ['1st F', 'TBD', '2nd C', 'TBD', '28 Jun'],
-  ['1st C', 'TBD', '2nd F', 'TBD', '29 Jun'],
-  ['1st I', 'TBD', '3rd C/D/F/G/H', 'TBD', '29 Jun'],
-  ['2nd E', 'TBD', '2nd I', 'TBD', '29 Jun'],
-  ['1st A', 'TBD', '3rd C/E/F/H/I', 'TBD', '30 Jun'],
-  ['1st L', 'TBD', '3rd E/H/I/J/K', 'TBD', '30 Jun'],
-  ['1st D', 'TBD', '3rd B/E/F/I/J', 'TBD', '1 Jul'],
-  ['1st G', 'TBD', '3rd A/E/H/I/J', 'TBD', '1 Jul'],
-  ['2nd K', 'TBD', '2nd L', 'TBD', '2 Jul'],
-  ['1st H', 'TBD', '2nd J', 'TBD', '2 Jul'],
-  ['1st B', 'TBD', '3rd E/F/G/I/J', 'TBD', '2 Jul'],
-  ['1st J', 'TBD', '2nd H', 'TBD', '2 Jul'],
-  ['1st K', 'TBD', '3rd D/E/I/J/L', 'TBD', '2 Jul'],
-  ['2nd D', 'TBD', '2nd G', 'TBD', '2 Jul'],
+  ['2nd A','TBD','2nd B','TBD','28 Jun'],['1st E','TBD','3rd A/B/C/D/F','TBD','28 Jun'],
+  ['1st F','TBD','2nd C','TBD','28 Jun'],['1st C','TBD','2nd F','TBD','29 Jun'],
+  ['1st I','TBD','3rd C/D/F/G/H','TBD','29 Jun'],['2nd E','TBD','2nd I','TBD','29 Jun'],
+  ['1st A','TBD','3rd C/E/F/H/I','TBD','30 Jun'],['1st L','TBD','3rd E/H/I/J/K','TBD','30 Jun'],
+  ['1st D','TBD','3rd B/E/F/I/J','TBD','1 Jul'],['1st G','TBD','3rd A/E/H/I/J','TBD','1 Jul'],
+  ['2nd K','TBD','2nd L','TBD','2 Jul'],['1st H','TBD','2nd J','TBD','2 Jul'],
+  ['1st B','TBD','3rd E/F/G/I/J','TBD','2 Jul'],['1st J','TBD','2nd H','TBD','2 Jul'],
+  ['1st K','TBD','3rd D/E/I/J/L','TBD','2 Jul'],['2nd D','TBD','2nd G','TBD','2 Jul'],
 ];
-
-const ROUNDS = [
-  { name: 'Round of 32', matches: 16, dates: '28 Jun–2 Jul' },
-  { name: 'Round of 16', matches: 8,  dates: '4–8 Jul' },
-  { name: 'Quarter-finals', matches: 4, dates: '9–12 Jul' },
-  { name: 'Semi-finals', matches: 2, dates: '14–15 Jul' },
-  { name: 'Final', matches: 1, dates: '19 Jul' },
+const ROUNDS=[
+  {name:'Round of 32',dates:'28 Jun–2 Jul'},{name:'Round of 16',dates:'4–8 Jul'},
+  {name:'Quarter-finals',dates:'9–12 Jul'},{name:'Semi-finals',dates:'14–15 Jul'},
+  {name:'Final',dates:'19 Jul'}
 ];
+function buildBracket(){
+  const wrap=document.getElementById('bracket');
+  const SH=52,GAP=8,CW=148,CG=32,HDRH=44;
+  const matchH=SH*2+GAP*2+8;
+  const totalH=16*matchH;
+  const svgW=(CW+CG)*5+CG, svgH=totalH+HDRH+60;
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('width',svgW);svg.setAttribute('height',svgH);
+  svg.style.display='block';svg.style.minWidth=svgW+'px';
 
-const SLOT_H   = 52;   // px per team slot
-const GAP      = 8;    // gap between matches
-const COL_W    = 148;  // column width px
-const COL_GAP  = 32;   // gap between columns
-
-function buildBracket() {
-  const wrap = document.getElementById('bracket');
-
-  // Total height is driven by R32 (16 matches × 2 slots + gaps)
-  const totalMatches_r32 = 16;
-  const matchH = SLOT_H * 2 + GAP * 2 + 8; // height of one match block
-  const totalH = totalMatches_r32 * matchH;
-
-  const svg_w = (COL_W + COL_GAP) * 5 + COL_GAP;
-  const svg_h = totalH + 60; // header space
-
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', svg_w);
-  svg.setAttribute('height', svg_h);
-  svg.style.display = 'block';
-  svg.style.minWidth = svg_w + 'px';
-
-  const HEADER_H = 44;
-
-  // Draw round headers
-  ROUNDS.forEach((r, ri) => {
-    const x = COL_GAP + ri * (COL_W + COL_GAP);
-    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.setAttribute('x', x); rect.setAttribute('y', 4);
-    rect.setAttribute('width', COL_W); rect.setAttribute('height', 36);
-    rect.setAttribute('rx', 6); rect.setAttribute('fill', '#0d5228');
-    svg.appendChild(rect);
-
-    const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    txt.setAttribute('x', x + COL_W/2); txt.setAttribute('y', 16);
-    txt.setAttribute('text-anchor', 'middle'); txt.setAttribute('fill', '#f0b429');
-    txt.setAttribute('font-family', 'Bebas Neue, sans-serif');
-    txt.setAttribute('font-size', '13');
-    txt.textContent = r.name;
-    svg.appendChild(txt);
-
-    const txt2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    txt2.setAttribute('x', x + COL_W/2); txt2.setAttribute('y', 32);
-    txt2.setAttribute('text-anchor', 'middle'); txt2.setAttribute('fill', '#8a9aa0');
-    txt2.setAttribute('font-family', 'Inter, sans-serif'); txt2.setAttribute('font-size', '9');
-    txt2.textContent = r.dates;
-    svg.appendChild(txt2);
+  ROUNDS.forEach((r,ri)=>{
+    const x=CG+ri*(CW+CG);
+    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x',x);rect.setAttribute('y',4);rect.setAttribute('width',CW);rect.setAttribute('height',36);
+    rect.setAttribute('rx',6);rect.setAttribute('fill','#0d5228');svg.appendChild(rect);
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',x+CW/2);t.setAttribute('y',17);t.setAttribute('text-anchor','middle');
+    t.setAttribute('fill','#f0b429');t.setAttribute('font-family','Bebas Neue,sans-serif');t.setAttribute('font-size','13');
+    t.textContent=r.name;svg.appendChild(t);
+    const t2=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t2.setAttribute('x',x+CW/2);t2.setAttribute('y',32);t2.setAttribute('text-anchor','middle');
+    t2.setAttribute('fill','#8a9aa0');t2.setAttribute('font-family','Inter,sans-serif');t2.setAttribute('font-size','9');
+    t2.textContent=r.dates;svg.appendChild(t2);
   });
 
-  // Helper: draw one match box
-  function drawMatch(svg, x, yCenter, topLabel, topTeam, botLabel, botTeam, isNorway) {
-    const y = yCenter - SLOT_H - GAP/2;
-    const h = SLOT_H * 2 + GAP;
-    const w = COL_W;
-
-    // Card background
-    const card = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    card.setAttribute('x', x); card.setAttribute('y', y);
-    card.setAttribute('width', w); card.setAttribute('height', h);
-    card.setAttribute('rx', 6);
-    card.setAttribute('fill', '#0e2718');
-    card.setAttribute('stroke', isNorway ? 'rgba(239,43,45,0.5)' : 'rgba(255,255,255,0.07)');
-    card.setAttribute('stroke-width', '1');
-    svg.appendChild(card);
-
-    // Divider line
-    const div = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    div.setAttribute('x1', x + 6); div.setAttribute('y1', yCenter);
-    div.setAttribute('x2', x + w - 6); div.setAttribute('y2', yCenter);
-    div.setAttribute('stroke', 'rgba(255,255,255,0.07)'); div.setAttribute('stroke-width', '1');
-    svg.appendChild(div);
-
-    // Top team
-    const topY = y + SLOT_H/2;
-    const isTopNorway = topTeam.toLowerCase() === 'norway' || topLabel.toLowerCase().includes('1st i') || topLabel.toLowerCase().includes('norway');
-
-    const lbl1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    lbl1.setAttribute('x', x + 8); lbl1.setAttribute('y', topY - 6);
-    lbl1.setAttribute('fill', '#8a9aa0'); lbl1.setAttribute('font-size', '8');
-    lbl1.setAttribute('font-family', 'Inter, sans-serif');
-    lbl1.textContent = topLabel;
-    svg.appendChild(lbl1);
-
-    const name1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    name1.setAttribute('x', x + 8); name1.setAttribute('y', topY + 8);
-    name1.setAttribute('fill', topTeam === 'TBD' ? '#8a9aa0' : '#f5f7f2');
-    name1.setAttribute('font-size', topTeam === 'TBD' ? '10' : '11');
-    name1.setAttribute('font-weight', topTeam !== 'TBD' ? '600' : '400');
-    name1.setAttribute('font-family', 'Inter, sans-serif');
-    name1.textContent = topTeam === 'TBD' ? '—' : topTeam;
-    svg.appendChild(name1);
-
-    // Bottom team
-    const botY = yCenter + SLOT_H/2;
-
-    const lbl2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    lbl2.setAttribute('x', x + 8); lbl2.setAttribute('y', botY - 6);
-    lbl2.setAttribute('fill', '#8a9aa0'); lbl2.setAttribute('font-size', '8');
-    lbl2.setAttribute('font-family', 'Inter, sans-serif');
-    lbl2.textContent = botLabel;
-    svg.appendChild(lbl2);
-
-    const name2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    name2.setAttribute('x', x + 8); name2.setAttribute('y', botY + 8);
-    name2.setAttribute('fill', botTeam === 'TBD' ? '#8a9aa0' : '#f5f7f2');
-    name2.setAttribute('font-size', botTeam === 'TBD' ? '10' : '11');
-    name2.setAttribute('font-weight', botTeam !== 'TBD' ? '600' : '400');
-    name2.setAttribute('font-family', 'Inter, sans-serif');
-    name2.textContent = botTeam === 'TBD' ? '—' : botTeam;
-    svg.appendChild(name2);
-
-    return { topMidY: topY + 8, botMidY: botY + 8, rightX: x + w, centerY: yCenter };
+  function drawMatch(x,yC,tl,tt,bl,bt){
+    const y=yC-SH-GAP/2,h=SH*2+GAP;
+    const card=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    card.setAttribute('x',x);card.setAttribute('y',y);card.setAttribute('width',CW);card.setAttribute('height',h);
+    card.setAttribute('rx',6);card.setAttribute('fill','#0e2718');
+    card.setAttribute('stroke','rgba(255,255,255,0.07)');card.setAttribute('stroke-width','1');svg.appendChild(card);
+    const div=document.createElementNS('http://www.w3.org/2000/svg','line');
+    div.setAttribute('x1',x+6);div.setAttribute('y1',yC);div.setAttribute('x2',x+CW-6);div.setAttribute('y2',yC);
+    div.setAttribute('stroke','rgba(255,255,255,0.07)');div.setAttribute('stroke-width','1');svg.appendChild(div);
+    [[tl,tt,yC-SH/2],[bl,bt,yC+SH/2]].forEach(([lbl,name,y])=>{
+      const l=document.createElementNS('http://www.w3.org/2000/svg','text');
+      l.setAttribute('x',x+8);l.setAttribute('y',y-6);l.setAttribute('fill','#8a9aa0');
+      l.setAttribute('font-size','8');l.setAttribute('font-family','Inter,sans-serif');l.textContent=lbl;svg.appendChild(l);
+      const n=document.createElementNS('http://www.w3.org/2000/svg','text');
+      n.setAttribute('x',x+8);n.setAttribute('y',y+8);
+      n.setAttribute('fill',name==='TBD'?'#8a9aa0':'#f5f7f2');
+      n.setAttribute('font-size',name==='TBD'?'10':'11');n.setAttribute('font-weight',name!=='TBD'?'600':'400');
+      n.setAttribute('font-family','Inter,sans-serif');n.textContent=name==='TBD'?'—':name;svg.appendChild(n);
+    });
+    return {rightX:x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8};
   }
 
-  // Helper: connector line between rounds
-  function drawConnector(svg, fromRightX, fromTopY, fromBotY, toLeftX, toY) {
-    const midX = fromRightX + COL_GAP / 2;
-    const path = `M ${fromRightX} ${fromTopY} H ${midX} V ${fromBotY} H ${midX} V ${toY} H ${toLeftX}`;
-    const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    el.setAttribute('d', path);
-    el.setAttribute('fill', 'none');
-    el.setAttribute('stroke', 'rgba(255,255,255,0.12)');
-    el.setAttribute('stroke-width', '1.5');
-    svg.appendChild(el);
+  function conn(fx,fty,fby,tx,ty){
+    const mx=fx+CG/2;
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',`M${fx} ${fty} H${mx} V${fby} H${mx} V${ty} H${tx}`);
+    p.setAttribute('fill','none');p.setAttribute('stroke','rgba(255,255,255,0.1)');p.setAttribute('stroke-width','1.5');
+    svg.appendChild(p);
   }
 
-  // Build rounds iteratively
-  // Store centers for connector lines
-  let prevCenters = []; // array of {rightX, topY, botY, centerY}
-
-  const NORWAY_GROUPS = ['I']; // Norway is in Group I
-
-  // R32 — 16 matches in one column
-  const r32x = COL_GAP;
-  let r32Centers = [];
-  R32.forEach((m, i) => {
-    const yCenter = HEADER_H + matchH * i + matchH / 2;
-    const isNorwayMatch = m[0].includes('I') || m[2].includes('I');
-    const info = drawMatch(svg, r32x, yCenter, m[0], m[1], m[2], m[3], isNorwayMatch);
-    r32Centers.push({ rightX: r32x + COL_W, topY: info.topMidY, botY: info.botMidY, centerY: yCenter });
+  const r32x=CG;
+  let r32c=R32.map((m,i)=>{
+    const yC=HDRH+matchH*i+matchH/2;
+    return drawMatch(r32x,yC,m[0],m[1],m[2],m[3]);
   });
 
-  // R16 — 8 matches, each fed by 2 R32 matches
-  const r16x = r32x + COL_W + COL_GAP;
-  let r16Centers = [];
-  for (let i = 0; i < 8; i++) {
-    const top = r32Centers[i * 2];
-    const bot = r32Centers[i * 2 + 1];
-    const yCenter = (top.centerY + bot.centerY) / 2;
-    drawMatch(svg, r16x, yCenter, 'W M'+(i*2+73), 'TBD', 'W M'+(i*2+74), 'TBD', false);
-    drawConnector(svg, top.rightX, top.topY, top.centerY, r16x, yCenter - SLOT_H/2 + 8);
-    drawConnector(svg, bot.rightX, bot.centerY, bot.botY, r16x, yCenter + SLOT_H/2 + 8);
-    r16Centers.push({ rightX: r16x + COL_W, centerY: yCenter, topY: yCenter - SLOT_H/2 + 8, botY: yCenter + SLOT_H/2 + 8 });
+  const r16x=r32x+CW+CG;
+  let r16c=[];
+  for(let i=0;i<8;i++){
+    const t=r32c[i*2],b=r32c[i*2+1],yC=(t.centerY+b.centerY)/2;
+    drawMatch(r16x,yC,'W M'+(i*2+73),'TBD','W M'+(i*2+74),'TBD');
+    conn(t.rightX,t.topY,t.centerY,r16x,yC-SH/2+8);
+    conn(b.rightX,b.centerY,b.botY,r16x,yC+SH/2+8);
+    r16c.push({rightX:r16x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
   }
 
-  // QF — 4 matches
-  const qfx = r16x + COL_W + COL_GAP;
-  let qfCenters = [];
-  for (let i = 0; i < 4; i++) {
-    const top = r16Centers[i * 2];
-    const bot = r16Centers[i * 2 + 1];
-    const yCenter = (top.centerY + bot.centerY) / 2;
-    drawMatch(svg, qfx, yCenter, 'W R16-'+(i*2+1), 'TBD', 'W R16-'+(i*2+2), 'TBD', false);
-    drawConnector(svg, top.rightX, top.topY, top.centerY, qfx, yCenter - SLOT_H/2 + 8);
-    drawConnector(svg, bot.rightX, bot.centerY, bot.botY, qfx, yCenter + SLOT_H/2 + 8);
-    qfCenters.push({ rightX: qfx + COL_W, centerY: yCenter, topY: yCenter - SLOT_H/2 + 8, botY: yCenter + SLOT_H/2 + 8 });
+  const qfx=r16x+CW+CG;
+  let qfc=[];
+  for(let i=0;i<4;i++){
+    const t=r16c[i*2],b=r16c[i*2+1],yC=(t.centerY+b.centerY)/2;
+    drawMatch(qfx,yC,'W R16-'+(i*2+1),'TBD','W R16-'+(i*2+2),'TBD');
+    conn(t.rightX,t.topY,t.centerY,qfx,yC-SH/2+8);
+    conn(b.rightX,b.centerY,b.botY,qfx,yC+SH/2+8);
+    qfc.push({rightX:qfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
   }
 
-  // SF — 2 matches
-  const sfx = qfx + COL_W + COL_GAP;
-  let sfCenters = [];
-  for (let i = 0; i < 2; i++) {
-    const top = qfCenters[i * 2];
-    const bot = qfCenters[i * 2 + 1];
-    const yCenter = (top.centerY + bot.centerY) / 2;
-    drawMatch(svg, sfx, yCenter, 'W QF-'+(i*2+1), 'TBD', 'W QF-'+(i*2+2), 'TBD', false);
-    drawConnector(svg, top.rightX, top.topY, top.centerY, sfx, yCenter - SLOT_H/2 + 8);
-    drawConnector(svg, bot.rightX, bot.centerY, bot.botY, sfx, yCenter + SLOT_H/2 + 8);
-    sfCenters.push({ rightX: sfx + COL_W, centerY: yCenter, topY: yCenter - SLOT_H/2 + 8, botY: yCenter + SLOT_H/2 + 8 });
+  const sfx=qfx+CW+CG;
+  let sfc=[];
+  for(let i=0;i<2;i++){
+    const t=qfc[i*2],b=qfc[i*2+1],yC=(t.centerY+b.centerY)/2;
+    drawMatch(sfx,yC,'W QF-'+(i*2+1),'TBD','W QF-'+(i*2+2),'TBD');
+    conn(t.rightX,t.topY,t.centerY,sfx,yC-SH/2+8);
+    conn(b.rightX,b.centerY,b.botY,sfx,yC+SH/2+8);
+    sfc.push({rightX:sfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
   }
 
-  // Final + 3rd place — stacked in last column
-  const finx = sfx + COL_W + COL_GAP;
-  const totalSfH = sfCenters[1].centerY - sfCenters[0].centerY;
+  const finx=sfx+CW+CG;
+  const finY=(sfc[0].centerY+sfc[1].centerY)/2;
+  drawMatch(finx,finY,'W SF-1','TBD','W SF-2','TBD');
+  conn(sfc[0].rightX,sfc[0].topY,sfc[0].centerY,finx,finY-SH/2+8);
+  conn(sfc[1].rightX,sfc[1].centerY,sfc[1].botY,finx,finY+SH/2+8);
+  const fl=document.createElementNS('http://www.w3.org/2000/svg','text');
+  fl.setAttribute('x',finx+CW/2);fl.setAttribute('y',finY-SH-GAP-6);fl.setAttribute('text-anchor','middle');
+  fl.setAttribute('fill','#f0b429');fl.setAttribute('font-size','10');fl.setAttribute('font-family','Bebas Neue,sans-serif');
+  fl.setAttribute('letter-spacing','1');fl.textContent='🏆 FINAL · 19 Jul';svg.appendChild(fl);
 
-  // Final
-  const finalY = (sfCenters[0].centerY + sfCenters[1].centerY) / 2;
-  drawMatch(svg, finx, finalY, 'W SF-1', 'TBD', 'W SF-2', 'TBD', false);
-  drawConnector(svg, sfCenters[0].rightX, sfCenters[0].topY, sfCenters[0].centerY, finx, finalY - SLOT_H/2 + 8);
-  drawConnector(svg, sfCenters[1].rightX, sfCenters[1].centerY, sfCenters[1].botY, finx, finalY + SLOT_H/2 + 8);
+  const thirdY=finY+SH*2+GAP*4;
+  drawMatch(finx,thirdY,'L SF-1','TBD','L SF-2','TBD');
+  const tl=document.createElementNS('http://www.w3.org/2000/svg','text');
+  tl.setAttribute('x',finx+CW/2);tl.setAttribute('y',thirdY-SH-GAP-6);tl.setAttribute('text-anchor','middle');
+  tl.setAttribute('fill','#c07840');tl.setAttribute('font-size','10');tl.setAttribute('font-family','Bebas Neue,sans-serif');
+  tl.setAttribute('letter-spacing','1');tl.textContent='🥉 3RD PLACE · 18 Jul';svg.appendChild(tl);
 
-  // Final label
-  const finLbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  finLbl.setAttribute('x', finx + COL_W/2); finLbl.setAttribute('y', finalY - SLOT_H - GAP - 6);
-  finLbl.setAttribute('text-anchor', 'middle'); finLbl.setAttribute('fill', '#f0b429');
-  finLbl.setAttribute('font-size', '10'); finLbl.setAttribute('font-family', 'Bebas Neue, sans-serif');
-  finLbl.setAttribute('letter-spacing', '1'); finLbl.textContent = '🏆 FINAL · 19 Jul';
-  svg.appendChild(finLbl);
-
-  // 3rd place
-  const thirdY = finalY + SLOT_H * 2 + GAP * 4;
-  drawMatch(svg, finx, thirdY, 'L SF-1', 'TBD', 'L SF-2', 'TBD', false);
-  const thirdLbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  thirdLbl.setAttribute('x', finx + COL_W/2); thirdLbl.setAttribute('y', thirdY - SLOT_H - GAP - 6);
-  thirdLbl.setAttribute('text-anchor', 'middle'); thirdLbl.setAttribute('fill', '#c07840');
-  thirdLbl.setAttribute('font-size', '10'); thirdLbl.setAttribute('font-family', 'Bebas Neue, sans-serif');
-  thirdLbl.setAttribute('letter-spacing', '1'); thirdLbl.textContent = '🥉 3RD PLACE · 18 Jul';
-  svg.appendChild(thirdLbl);
-
-  // Adjust SVG height to content
-  const neededH = Math.max(thirdY + SLOT_H + GAP + 20, svg_h);
-  svg.setAttribute('height', neededH);
-
+  svg.setAttribute('height',Math.max(thirdY+SH+GAP+20,svgH));
   wrap.appendChild(svg);
 }
 
-buildBracket();
-</script>
+// ── ENTER KEY ON LOGIN ────────────────────────────────────────────────────────
+document.getElementById('login-pin').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 
+// ── INIT ──────────────────────────────────────────────────────────────────────
+renderGroups();
+buildBracket();
+loadAll();
+</script>
 </body>
 </html>
