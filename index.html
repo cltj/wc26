@@ -73,7 +73,8 @@
   .chip-exact  { background:rgba(240,180,41,.15); color:var(--gold) }
   .chip-win    { background:rgba(96,185,122,.15);  color:var(--green) }
   .chip-wrong  { background:rgba(224,52,52,.10);   color:#e07070 }
-  .chip-played { background:rgba(255,255,255,.06); color:var(--dim) }
+  .chip-played  { background:rgba(255,255,255,.06); color:var(--dim) }
+  .chip-missed  { background:rgba(255,255,255,.04); color:#6a7a80 }
   .lb-card.rank-1::after { content:'🏆'; position:absolute; top:14px; right:14px; font-size:18px; opacity:.7 }
 
   /* ── GAMES ── */
@@ -108,6 +109,7 @@
   .pb-1 { background:rgba(96,185,122,.18); color:var(--green) }
   .pb-0 { background:rgba(224,52,52,.12); color:#e07070 }
   .pb-p { background:rgba(255,255,255,.05); color:var(--dim) }
+  .pb-m { background:rgba(255,255,255,.04); color:#6a7a80; font-style:italic }
 
   /* ── PREDICTION INPUT ── */
   .pred-input-row { display:flex; gap:8px; align-items:center; padding-top:10px; border-top:1px solid var(--border) }
@@ -266,31 +268,55 @@ async function sb(path, opts={}) {
 }
 
 // ── SCORING ──────────────────────────────────────────────────────────────────
+function isValidScore(s) {
+  // Must be X-Y format where both parts are non-negative integers
+  if (!s) return false;
+  const parts = s.trim().split('-');
+  if (parts.length !== 2) return false;
+  const [a, b] = parts.map(Number);
+  return !isNaN(a) && !isNaN(b) && Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b >= 0;
+}
+
 function calcPts(result, pred) {
-  if (!result || !pred) return null;
-  if (result === pred) return 3;
+  // No result yet — pending
+  if (!result) return null;
+  // No prediction or invalid format (pass/blank/etc) — missed, scores null (excluded)
+  if (!pred || !isValidScore(pred)) return null;
+  // Exact score
+  if (result.trim() === pred.trim()) return 3;
   try {
-    const [rh,ra] = result.split('-').map(Number);
-    const [ph,pa] = pred.split('-').map(Number);
+    const [rh,ra] = result.trim().split('-').map(Number);
+    const [ph,pa] = pred.trim().split('-').map(Number);
     const sign = x => x>0?1:x<0?-1:0;
     if (sign(rh-ra) === sign(ph-pa)) return 1;
   } catch(e) {}
   return 0;
 }
 
+// Separate function to classify a prediction entry
+function predStatus(result, pred) {
+  if (!result) return 'pending';          // game not played yet
+  if (!pred || !isValidScore(pred)) return 'missed';  // no valid tip
+  const pts = calcPts(result, pred);
+  return pts === 3 ? 'exact' : pts === 1 ? 'winner' : 'wrong';
+}
+
 function buildLeaderboard(games, predictions) {
   const totals = {};
-  CONTENDERS.forEach(n => totals[n] = {pts:0,exact:0,winner:0,wrong:0,played:0});
+  CONTENDERS.forEach(n => totals[n] = {pts:0,exact:0,winner:0,wrong:0,missed:0,played:0});
   games.forEach(g => {
     if (!g.result) return;
     CONTENDERS.forEach(n => {
       const p = predictions.find(p => p.game_id===g.id && p.participant===n);
-      const pts = calcPts(g.result, p?.prediction);
-      if (pts !== null) {
+      const status = predStatus(g.result, p?.prediction);
+      if (status === 'missed') {
+        totals[n].missed++;  // count but don't add points
+      } else if (status !== 'pending') {
+        const pts = calcPts(g.result, p?.prediction);
         totals[n].pts += pts;
         totals[n].played++;
-        if (pts===3) totals[n].exact++;
-        else if (pts===1) totals[n].winner++;
+        if (status==='exact') totals[n].exact++;
+        else if (status==='winner') totals[n].winner++;
         else totals[n].wrong++;
       }
     });
@@ -374,6 +400,7 @@ function renderLeaderboard() {
         ${s.exact  ? `<span class="chip chip-exact">${s.exact}× exact</span>` : ''}
         ${s.winner ? `<span class="chip chip-win">${s.winner}× winner</span>` : ''}
         ${s.wrong  ? `<span class="chip chip-wrong">${s.wrong}× miss</span>` : ''}
+        ${s.missed ? `<span class="chip chip-missed">${s.missed}× skipped</span>` : ''}
         <span class="chip chip-played">${s.played} played</span>
       </div>
     </div>`).join('');
@@ -388,10 +415,12 @@ function isLocked(g) {
   return new Date() >= new Date(g.kickoff);
 }
 
-function badgeHtml(pts) {
-  if (pts===null) return `<span class="pred-badge pb-p">Pending</span>`;
-  if (pts===3)   return `<span class="pred-badge pb-3">⚽ 3 pts</span>`;
-  if (pts===1)   return `<span class="pred-badge pb-1">✓ 1 pt</span>`;
+function badgeHtml(result, pred) {
+  const status = predStatus(result, pred);
+  if (status==='pending') return '';
+  if (status==='missed')  return `<span class="pred-badge pb-m">— missed</span>`;
+  if (status==='exact')   return `<span class="pred-badge pb-3">⚽ 3 pts</span>`;
+  if (status==='winner')  return `<span class="pred-badge pb-1">✓ 1 pt</span>`;
   return `<span class="pred-badge pb-0">✗ 0 pts</span>`;
 }
 
@@ -412,7 +441,7 @@ function renderGames() {
         ${p?.prediction
           ? `<div class="pred-cell-score">${p.prediction}</div>`
           : `<div class="pred-cell-score empty">—</div>`}
-        ${g.result ? badgeHtml(pts) : (p ? `<span class="pred-badge pb-p">Tipped</span>` : '')}
+        ${g.result ? badgeHtml(g.result, p?.prediction) : (p && isValidScore(p.prediction) ? `<span class="pred-badge pb-p">Tipped ✓</span>` : '')}
       </div>`;
     }).join('');
 
