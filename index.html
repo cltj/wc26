@@ -76,6 +76,13 @@
   .chip-played  { background:rgba(255,255,255,.06); color:var(--dim) }
   .chip-missed  { background:rgba(255,255,255,.04); color:#6a7a80 }
   .lb-card.rank-1::after { content:'🏆'; position:absolute; top:14px; right:14px; font-size:18px; opacity:.7 }
+  .lb-photo { width:100%; aspect-ratio:3/4; object-fit:cover; object-position:top; border-radius:7px; margin-bottom:12px; display:block; background:#071810 }
+  .lb-photo-wrap { position:relative; }
+  .lb-photo-wrap .rank-ribbon { position:absolute; top:8px; left:8px; font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:.1em; padding:3px 8px; border-radius:4px; color:#fff }
+  .rank-1 .rank-ribbon { background:var(--gold); color:#003 }
+  .rank-2 .rank-ribbon { background:var(--silver); color:#111 }
+  .rank-3 .rank-ribbon { background:var(--bronze); color:#fff }
+  .rank-4 .rank-ribbon, .rank-5 .rank-ribbon { background:rgba(255,255,255,.1); color:var(--dim) }
 
   /* ── GAMES ── */
   .games-list { display:flex; flex-direction:column; gap:10px }
@@ -386,14 +393,20 @@ async function loadAll() {
 }
 
 // ── LEADERBOARD ───────────────────────────────────────────────────────────────
+const PLAYER_PHOTOS = {"Eivind": "https://cltj.github.io/wc26/eivind.jpeg", "TJ": "https://cltj.github.io/wc26/tj.jpg", "Mari": "https://cltj.github.io/wc26/placeholder.jpg", "Benny": "https://cltj.github.io/wc26/placeholder.jpg", "Martin": "https://cltj.github.io/wc26/placeholder.jpg"};
+
 function renderLeaderboard() {
   const grid = document.getElementById('lb-grid');
   const lb = buildLeaderboard(allGames, allPredictions);
   const rankLabel = ['🥇 1st','🥈 2nd','🥉 3rd','4th','5th'];
   const rankClass = ['rank-1','rank-2','rank-3','rank-4','rank-5'];
-  grid.innerHTML = lb.map(([name, s], i) => `
-    <div class="lb-card ${rankClass[i]||''}">
-      <div class="lb-rank">${rankLabel[i]||''}</div>
+  grid.innerHTML = lb.map(([name, s], i) => {
+    const photo = PLAYER_PHOTOS[name];
+    return `<div class="lb-card ${rankClass[i]||''}">
+      <div class="lb-photo-wrap">
+        <img class="lb-photo" src="${photo}" alt="${name} football card" loading="lazy" onerror="this.src='https://cltj.github.io/wc26/placeholder.jpg'">
+        <span class="rank-ribbon">${rankLabel[i]||''}</span>
+      </div>
       <div class="lb-name">${name}</div>
       <div class="lb-pts">${s.pts}</div>
       <div class="lb-meta">
@@ -403,7 +416,8 @@ function renderLeaderboard() {
         ${s.missed ? `<span class="chip chip-missed">${s.missed}× skipped</span>` : ''}
         <span class="chip chip-played">${s.played} played</span>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ── GAMES ─────────────────────────────────────────────────────────────────────
