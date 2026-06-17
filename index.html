@@ -469,28 +469,37 @@ async function savePrediction(gameId) {
   if (!pred) return;
 
   inp.disabled = true;
+  msg.textContent = 'Saved \u2713';
+  msg.style.color = 'var(--green)';
+
   try {
-    await sb('predictions', {
-      method: 'POST',
-      headers: { 'Prefer': 'resolution=merge-duplicates' },
-      body: JSON.stringify({ game_id: gameId, participant: currentUser, prediction: pred })
-    });
-    // Update local state
-    const idx = allPredictions.findIndex(p => p.game_id===gameId && p.participant===currentUser);
-    if (idx >= 0) allPredictions[idx].prediction = pred;
-    else allPredictions.push({ game_id: gameId, participant: currentUser, prediction: pred });
+    const existing = allPredictions.find(p => p.game_id===gameId && p.participant===currentUser);
+
+    if (existing) {
+      await sb(`predictions?game_id=eq.${gameId}&participant=eq.${encodeURIComponent(currentUser)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ prediction: pred })
+      });
+      existing.prediction = pred;
+    } else {
+      await sb('predictions', {
+        method: 'POST',
+        body: JSON.stringify({ game_id: gameId, participant: currentUser, prediction: pred })
+      });
+      allPredictions.push({ game_id: gameId, participant: currentUser, prediction: pred });
+    }
 
     msg.classList.add('show');
     setTimeout(() => msg.classList.remove('show'), 2500);
     renderLeaderboard();
     renderGames();
-    // Re-open the panel
     setTimeout(() => {
       const panel = document.getElementById(`panel-${gameId}`);
       if (panel) panel.classList.add('open');
     }, 50);
   } catch(e) {
-    msg.textContent = 'Error saving';
+    console.error('Save error:', e);
+    msg.textContent = 'Error: ' + e.message;
     msg.style.color = 'var(--red)';
     msg.classList.add('show');
   } finally {
