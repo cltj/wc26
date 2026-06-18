@@ -273,8 +273,12 @@
         <button onclick="saveResult()">Save Result</button>
         <span id="admin-msg" style="font-size:12px;color:var(--green)"></span>
       </div>
+      <div class="admin-row" style="margin-top:10px">
+        <button id="sync-btn" onclick="runSync()">Sync from Web</button>
+        <span id="sync-msg" style="font-size:12px;color:var(--dim)"></span>
+      </div>
     </div>
-    <div class="admin-note">⚠️ Only TJ can save results. Results auto-calculate everyone's points.</div>
+    <div class="admin-note">⚠️ Only TJ can save results. "Sync from Web" fetches live results via AI web search.</div>
   </div>
 </section>
 
@@ -657,6 +661,42 @@ async function saveResult() {
   } catch(e) {
     msg.textContent = 'Error: ' + e.message;
     msg.style.color = 'var(--red)';
+  }
+}
+
+// ── ADMIN — SYNC FROM WEB ─────────────────────────────────────────────────────
+async function runSync() {
+  if (currentUser !== ADMIN) return;
+  const btn = document.getElementById('sync-btn');
+  const msg = document.getElementById('sync-msg');
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+  msg.textContent = '';
+  msg.style.color = 'var(--dim)';
+
+  try {
+    const res = await fetch(`${SB_URL}/functions/v1/sync`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SB_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Sync failed');
+
+    msg.style.color = 'var(--green)';
+    msg.textContent = (data.log || []).filter(l => l.startsWith('✓')).join(' · ') || 'Sync complete ✓';
+
+    // Reload everything to reflect updated data
+    await loadAll();
+    await loadSquads();
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sync from Web';
   }
 }
 
