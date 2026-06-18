@@ -166,6 +166,38 @@
     .gteam { font-size:12px }
     .pred-cell { min-width:75px }
   }
+
+  /* ── SQUADS ── */
+  .squad-section { margin-top: 48px }
+  .squad-controls { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; align-items:center }
+  .squad-search { flex:1; min-width:200px; background:#071810; border:1px solid var(--border); color:var(--white); border-radius:8px; padding:10px 14px; font-size:13px; font-family:'Inter',sans-serif; outline:none }
+  .squad-search:focus { border-color:var(--gold) }
+  .squad-search::placeholder { color:var(--dim) }
+  .group-filter { display:flex; gap:6px; flex-wrap:wrap }
+  .gf-btn { background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--dim); border-radius:6px; padding:6px 12px; font-size:11px; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; letter-spacing:.05em; transition:all .15s }
+  .gf-btn:hover { border-color:var(--gold); color:var(--gold) }
+  .gf-btn.active { background:rgba(240,180,41,.15); border-color:var(--gold); color:var(--gold) }
+  .squad-team-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px }
+  .squad-team-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden }
+  .squad-team-card.norway { border-color:rgba(239,43,45,.4) }
+  .squad-team-hdr { display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; user-select:none }
+  .squad-team-hdr:hover { background:rgba(255,255,255,.025) }
+  .squad-flag { font-size:22px; line-height:1 }
+  .squad-team-name { font-weight:700; font-size:14px; flex:1 }
+  .squad-team-meta { font-size:11px; color:var(--dim) }
+  .squad-toggle { font-size:10px; color:var(--dim); transition:transform .2s }
+  .squad-team-card.open .squad-toggle { transform:rotate(180deg) }
+  .squad-player-list { display:none; border-top:1px solid var(--border) }
+  .squad-team-card.open .squad-player-list { display:block }
+  .squad-pos-group { padding:8px 14px 4px }
+  .squad-pos-label { font-size:9px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin-bottom:6px }
+  .squad-player-row { display:grid; grid-template-columns:28px 1fr auto; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.04) }
+  .squad-player-row:last-child { border-bottom:none }
+  .squad-num { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--dim); text-align:center }
+  .squad-name { font-size:12px; font-weight:500 }
+  .squad-club { font-size:10px; color:var(--dim); text-align:right }
+  .squad-loading { color:var(--dim); font-size:13px; padding:20px 0 }
+
 </style>
 </head>
 <body>
@@ -242,6 +274,18 @@
     <div class="admin-note">⚠️ Only TJ can save results. Results auto-calculate everyone's points.</div>
   </div>
 </section>
+
+
+  <!-- SQUAD BROWSER -->
+  <section class="squad-section">
+    <div class="section-title">Squad Browser</div>
+    <div class="squad-controls">
+      <input type="text" class="squad-search" id="squad-search" placeholder="Search player or team…" oninput="filterSquads()">
+      <div class="group-filter" id="group-filter"></div>
+    </div>
+    <div id="squad-status" class="squad-loading">Loading squads…</div>
+    <div class="squad-team-grid" id="squad-grid"></div>
+  </section>
 
 </div>
 
@@ -758,6 +802,139 @@ document.getElementById('login-pin').addEventListener('keydown', e => { if(e.key
 renderGroups();
 buildBracket();
 loadAll();
+
+
+// ── SQUAD BROWSER ────────────────────────────────────────────────────────────
+let allPlayers = [];
+let allTeamsData = [];
+let activeGroup = 'ALL';
+
+const POS_ORDER = ['GK','DF','MF','FW'];
+const POS_LABELS = { GK:'Goalkeepers', DF:'Defenders', MF:'Midfielders', FW:'Forwards' };
+const FLAG_MAP = {
+  'Mexico':'🇲🇽','South Africa':'🇿🇦','South Korea':'🇰🇷','Czechia':'🇨🇿',
+  'Canada':'🇨🇦','Bosnia & Herz.':'🇧🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭',
+  'Brazil':'🇧🇷','Morocco':'🇲🇦','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Haiti':'🇭🇹',
+  'USA':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺','Türkiye':'🇹🇷',
+  'Germany':'🇩🇪',"Côte d'Ivoire":'🇨🇮','Ecuador':'🇪🇨','Curaçao':'🇨🇼',
+  'Netherlands':'🇳🇱','Japan':'🇯🇵','Sweden':'🇸🇪','Tunisia':'🇹🇳',
+  'Belgium':'🇧🇪','Egypt':'🇪🇬','IR Iran':'🇮🇷','New Zealand':'🇳🇿',
+  'Spain':'🇪🇸','Cabo Verde':'🇨🇻','Saudi Arabia':'🇸🇦','Uruguay':'🇺🇾',
+  'France':'🇫🇷','Senegal':'🇸🇳','Iraq':'🇮🇶','Norway':'🇳🇴',
+  'Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴',
+  'Portugal':'🇵🇹','DR Congo':'🇨🇩','Uzbekistan':'🇺🇿','Colombia':'🇨🇴',
+  'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦',
+};
+
+async function loadSquads() {
+  try {
+    const [players, teams] = await Promise.all([
+      sb('players?select=*&order=team_name,shirt_number'),
+      sb('teams?select=name,group_letter,flag_emoji&order=group_letter,name')
+    ]);
+    allPlayers = players;
+    allTeamsData = teams;
+    buildGroupFilter(teams);
+    renderSquads();
+    document.getElementById('squad-status').style.display = 'none';
+  } catch(e) {
+    document.getElementById('squad-status').textContent = 'Could not load squads: ' + e.message;
+  }
+}
+
+function buildGroupFilter(teams) {
+  const letters = [...new Set(teams.map(t => t.group_letter))].sort();
+  const wrap = document.getElementById('group-filter');
+  wrap.innerHTML = ['ALL', ...letters].map(g =>
+    `<button class="gf-btn${g==='ALL'?' active':''}" onclick="setGroup('${g}')">${g==='ALL'?'All groups':'Group '+g}</button>`
+  ).join('');
+}
+
+function setGroup(g) {
+  activeGroup = g;
+  document.querySelectorAll('.gf-btn').forEach(b => b.classList.toggle('active', b.textContent === (g==='ALL'?'All groups':'Group '+g)));
+  renderSquads();
+}
+
+function filterSquads() { renderSquads(); }
+
+function renderSquads() {
+  const grid = document.getElementById('squad-grid');
+  const q = document.getElementById('squad-search').value.trim().toLowerCase();
+
+  // Group players by team
+  const byTeam = {};
+  allPlayers.forEach(p => {
+    if (!byTeam[p.team_name]) byTeam[p.team_name] = [];
+    byTeam[p.team_name].push(p);
+  });
+
+  // Filter teams
+  let teams = allTeamsData.filter(t => {
+    if (activeGroup !== 'ALL' && t.group_letter !== activeGroup) return false;
+    if (q) {
+      const matchTeam = t.name.toLowerCase().includes(q);
+      const matchPlayer = (byTeam[t.name] || []).some(p => p.name.toLowerCase().includes(q));
+      return matchTeam || matchPlayer;
+    }
+    return true;
+  });
+
+  grid.innerHTML = teams.map(team => {
+    const players = byTeam[team.name] || [];
+    const flag = FLAG_MAP[team.name] || team.flag_emoji || '🏳';
+    const isNorway = team.name === 'Norway';
+
+    // Filter players if search active
+    const filtered = q
+      ? players.filter(p => p.name.toLowerCase().includes(q) || team.name.toLowerCase().includes(q))
+      : players;
+
+    const byPos = {};
+    POS_ORDER.forEach(pos => byPos[pos] = []);
+    filtered.forEach(p => { if (byPos[p.position]) byPos[p.position].push(p); });
+
+    const posHtml = POS_ORDER.map(pos => {
+      if (!byPos[pos].length) return '';
+      return `<div class="squad-pos-group">
+        <div class="squad-pos-label">${POS_LABELS[pos]}</div>
+        ${byPos[pos].map(p => `
+          <div class="squad-player-row">
+            <div class="squad-num">${p.shirt_number}</div>
+            <div class="squad-name">${p.name}</div>
+            <div class="squad-club">${p.club}</div>
+          </div>`).join('')}
+      </div>`;
+    }).join('');
+
+    return `<div class="squad-team-card${isNorway?' norway':''}" id="squad-${team.name.replace(/[^a-zA-Z]/g,'_')}">
+      <div class="squad-team-hdr" onclick="toggleSquad('${team.name.replace(/'/g,"\'")}')">
+        <span class="squad-flag">${flag}</span>
+        <div>
+          <div class="squad-team-name">${team.name}${isNorway?' 🇳🇴':''}</div>
+          <div class="squad-team-meta">Group ${team.group_letter} · ${filtered.length} players</div>
+        </div>
+        <span class="squad-toggle">▼</span>
+      </div>
+      <div class="squad-player-list">${posHtml}</div>
+    </div>`;
+  }).join('');
+
+  // Auto-open if search active and only one team matches
+  if (q && teams.length === 1) {
+    const card = grid.querySelector('.squad-team-card');
+    if (card) { card.classList.add('open'); }
+  }
+}
+
+function toggleSquad(teamName) {
+  const id = 'squad-' + teamName.replace(/[^a-zA-Z]/g,'_');
+  const card = document.getElementById(id);
+  if (card) card.classList.toggle('open');
+}
+
+loadSquads();
+
 </script>
 </body>
 </html>
