@@ -827,18 +827,35 @@ const FLAG_MAP = {
 };
 
 async function loadSquads() {
+  const status = document.getElementById('squad-status');
   try {
-    const [players, teams] = await Promise.all([
-      sb('players?select=*&order=team_name,shirt_number'),
-      sb('teams?select=name,group_letter,flag_emoji&order=group_letter,name')
-    ]);
-    allPlayers = players;
+    // Fetch all players in batches (Supabase default limit is 1000)
+    let allP = [];
+    let from = 0;
+    const batchSize = 500;
+    while (true) {
+      const batch = await sb(`players?select=*&order=team_name,shirt_number`, {
+        headers: { 'Range': `${from}-${from + batchSize - 1}`, 'Range-Unit': 'items' }
+      });
+      if (!batch || batch.length === 0) break;
+      allP = allP.concat(batch);
+      if (batch.length < batchSize) break;
+      from += batchSize;
+    }
+
+    const teams = await sb('teams?select=name,group_letter,flag_emoji&order=group_letter,name');
+
+    allPlayers = allP;
     allTeamsData = teams;
+
+    status.textContent = `Loaded ${allP.length} players across ${teams.length} teams`;
+    setTimeout(() => status.style.display = 'none', 2000);
+
     buildGroupFilter(teams);
     renderSquads();
-    document.getElementById('squad-status').style.display = 'none';
   } catch(e) {
-    document.getElementById('squad-status').textContent = 'Could not load squads: ' + e.message;
+    console.error('Squad load error:', e);
+    status.textContent = 'Could not load squads: ' + e.message;
   }
 }
 
