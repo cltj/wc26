@@ -167,35 +167,38 @@
     .pred-cell { min-width:75px }
   }
 
-  /* ── SQUADS ── */
-  .squad-section { margin-top: 48px }
-  .squad-controls { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; align-items:center }
-  .squad-search { flex:1; min-width:200px; background:#071810; border:1px solid var(--border); color:var(--white); border-radius:8px; padding:10px 14px; font-size:13px; font-family:'Inter',sans-serif; outline:none }
-  .squad-search:focus { border-color:var(--gold) }
-  .squad-search::placeholder { color:var(--dim) }
-  .group-filter { display:flex; gap:6px; flex-wrap:wrap }
-  .gf-btn { background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--dim); border-radius:6px; padding:6px 12px; font-size:11px; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; letter-spacing:.05em; transition:all .15s }
-  .gf-btn:hover { border-color:var(--gold); color:var(--gold) }
-  .gf-btn.active { background:rgba(240,180,41,.15); border-color:var(--gold); color:var(--gold) }
-  .squad-team-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px }
-  .squad-team-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden }
-  .squad-team-card.norway { border-color:rgba(239,43,45,.4) }
-  .squad-team-hdr { display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; user-select:none }
-  .squad-team-hdr:hover { background:rgba(255,255,255,.025) }
-  .squad-flag { font-size:22px; line-height:1 }
-  .squad-team-name { font-weight:700; font-size:14px; flex:1 }
-  .squad-team-meta { font-size:11px; color:var(--dim) }
-  .squad-toggle { font-size:10px; color:var(--dim); transition:transform .2s }
-  .squad-team-card.open .squad-toggle { transform:rotate(180deg) }
-  .squad-player-list { display:none; border-top:1px solid var(--border) }
-  .squad-team-card.open .squad-player-list { display:block }
-  .squad-pos-group { padding:8px 14px 4px }
-  .squad-pos-label { font-size:9px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin-bottom:6px }
-  .squad-player-row { display:grid; grid-template-columns:28px 1fr auto; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.04) }
-  .squad-player-row:last-child { border-bottom:none }
-  .squad-num { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--dim); text-align:center }
-  .squad-name { font-size:12px; font-weight:500 }
-  .squad-club { font-size:10px; color:var(--dim); text-align:right }
+  /* ── PLAYER SEARCH ── */
+  .player-search-section { margin-top:48px }
+  .player-controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px }
+  .player-search { flex:2; min-width:180px; background:#071810; border:1px solid var(--border); color:var(--white); border-radius:8px; padding:10px 14px; font-size:13px; font-family:'Inter',sans-serif; outline:none }
+  .player-search:focus { border-color:var(--gold) }
+  .player-search::placeholder { color:var(--dim) }
+  .player-select { background:#071810; border:1px solid var(--border); color:var(--white); border-radius:8px; padding:10px 12px; font-size:12px; font-family:'Inter',sans-serif; outline:none; cursor:pointer }
+  .player-select:focus { border-color:var(--gold) }
+  .player-select option { background:#071810 }
+  .player-results-meta { font-size:11px; color:var(--dim); margin-bottom:10px; min-height:16px }
+  .player-table-wrap { overflow-x:auto }
+  .player-table { width:100%; border-collapse:collapse; font-size:12px }
+  .player-table th { background:#0d3320; color:var(--dim); font-weight:700; font-size:10px; letter-spacing:.08em; text-transform:uppercase; padding:8px 10px; text-align:left; white-space:nowrap; cursor:pointer; user-select:none }
+  .player-table th:hover { color:var(--gold) }
+  .player-table th.sorted { color:var(--gold) }
+  .player-table th.sorted::after { content:' ↓'; font-size:9px }
+  .player-table th.sorted.asc::after { content:' ↑' }
+  .player-table td { padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; vertical-align:middle }
+  .player-table tr:hover td { background:rgba(255,255,255,.025) }
+  .player-table tr.norway-row td { border-left:2px solid var(--norway) }
+  .pt-num { font-family:'JetBrains Mono',monospace; color:var(--dim); width:32px }
+  .pt-name { font-weight:600; color:var(--white) }
+  .pt-team { color:var(--dim) }
+  .pt-club { color:var(--dim); max-width:140px; overflow:hidden; text-overflow:ellipsis }
+  .pt-pos { display:inline-block; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; letter-spacing:.05em }
+  .pos-GK { background:rgba(240,180,41,.15); color:var(--gold) }
+  .pos-DF { background:rgba(96,185,122,.15); color:var(--green) }
+  .pos-MF { background:rgba(100,160,240,.15); color:#7ab4f0 }
+  .pos-FW { background:rgba(224,52,52,.15); color:#f07070 }
+  .pt-stat { text-align:center; font-family:'JetBrains Mono',monospace; font-size:12px }
+  .pt-stat.nonzero { color:var(--white); font-weight:600 }
+  .pt-stat.zero { color:rgba(255,255,255,.2) }
   .squad-loading { color:var(--dim); font-size:13px; padding:20px 0 }
 
 </style>
@@ -276,15 +279,45 @@
 </section>
 
 
-  <!-- SQUAD BROWSER -->
-  <section class="squad-section">
-    <div class="section-title">Squad Browser</div>
-    <div class="squad-controls">
-      <input type="text" class="squad-search" id="squad-search" placeholder="Search player or team…" oninput="filterSquads()">
-      <div class="group-filter" id="group-filter"></div>
+  <!-- PLAYER SEARCH -->
+  <section class="player-search-section">
+    <div class="section-title">Players</div>
+    <div class="player-controls">
+      <input type="text" class="player-search" id="player-search" placeholder="🔍  Search player name…" oninput="renderPlayers()">
+      <select class="player-select" id="filter-group" onchange="onGroupChange()">
+        <option value="">All groups</option>
+      </select>
+      <select class="player-select" id="filter-team" onchange="renderPlayers()">
+        <option value="">All teams</option>
+      </select>
+      <select class="player-select" id="filter-pos" onchange="renderPlayers()">
+        <option value="">All positions</option>
+        <option value="GK">GK – Goalkeepers</option>
+        <option value="DF">DF – Defenders</option>
+        <option value="MF">MF – Midfielders</option>
+        <option value="FW">FW – Forwards</option>
+      </select>
     </div>
-    <div id="squad-status" class="squad-loading">Loading squads…</div>
-    <div class="squad-team-grid" id="squad-grid"></div>
+    <div id="squad-status" class="squad-loading">Loading players…</div>
+    <div class="player-results-meta" id="player-meta"></div>
+    <div class="player-table-wrap">
+      <table class="player-table" id="player-table">
+        <thead>
+          <tr>
+            <th class="pt-num" onclick="sortBy('shirt_number')">#</th>
+            <th onclick="sortBy('name')">Player</th>
+            <th onclick="sortBy('position')">Pos</th>
+            <th onclick="sortBy('team_name')">Team</th>
+            <th onclick="sortBy('club')">Club</th>
+            <th onclick="sortBy('goals')" title="Goals">⚽</th>
+            <th onclick="sortBy('assists')" title="Assists">🎯</th>
+            <th onclick="sortBy('yellow_cards')" title="Yellow cards">🟨</th>
+            <th onclick="sortBy('red_cards')" title="Red cards">🟥</th>
+          </tr>
+        </thead>
+        <tbody id="player-tbody"></tbody>
+      </table>
+    </div>
   </section>
 
 </div>
@@ -804,32 +837,15 @@ buildBracket();
 loadAll();
 
 
-// ── SQUAD BROWSER ────────────────────────────────────────────────────────────
+// ── PLAYER SEARCH ───────────────────────────────────────────────────────────
 let allPlayers = [];
 let allTeamsData = [];
-let activeGroup = 'ALL';
-
-const POS_ORDER = ['GK','DF','MF','FW'];
-const POS_LABELS = { GK:'Goalkeepers', DF:'Defenders', MF:'Midfielders', FW:'Forwards' };
-const FLAG_MAP = {
-  'Mexico':'🇲🇽','South Africa':'🇿🇦','South Korea':'🇰🇷','Czechia':'🇨🇿',
-  'Canada':'🇨🇦','Bosnia & Herz.':'🇧🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭',
-  'Brazil':'🇧🇷','Morocco':'🇲🇦','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Haiti':'🇭🇹',
-  'USA':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺','Türkiye':'🇹🇷',
-  'Germany':'🇩🇪',"Côte d'Ivoire":'🇨🇮','Ecuador':'🇪🇨','Curaçao':'🇨🇼',
-  'Netherlands':'🇳🇱','Japan':'🇯🇵','Sweden':'🇸🇪','Tunisia':'🇹🇳',
-  'Belgium':'🇧🇪','Egypt':'🇪🇬','IR Iran':'🇮🇷','New Zealand':'🇳🇿',
-  'Spain':'🇪🇸','Cabo Verde':'🇨🇻','Saudi Arabia':'🇸🇦','Uruguay':'🇺🇾',
-  'France':'🇫🇷','Senegal':'🇸🇳','Iraq':'🇮🇶','Norway':'🇳🇴',
-  'Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴',
-  'Portugal':'🇵🇹','DR Congo':'🇨🇩','Uzbekistan':'🇺🇿','Colombia':'🇨🇴',
-  'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦',
-};
+let sortCol = 'name';
+let sortAsc = true;
 
 async function loadSquads() {
   const status = document.getElementById('squad-status');
   try {
-    // Fetch all players — use limit/offset params to paginate (keeps auth headers intact)
     let allP = [];
     let from = 0;
     const batchSize = 500;
@@ -840,112 +856,121 @@ async function loadSquads() {
       if (batch.length < batchSize) break;
       from += batchSize;
     }
-
     const teams = await sb('teams?select=name,group_letter,flag_emoji&order=group_letter,name');
-
     allPlayers = allP;
     allTeamsData = teams;
-
-    status.textContent = `Loaded ${allP.length} players across ${teams.length} teams`;
-    setTimeout(() => status.style.display = 'none', 2000);
-
-    buildGroupFilter(teams);
-    renderSquads();
+    buildFilters(teams);
+    status.style.display = 'none';
+    renderPlayers();
   } catch(e) {
-    console.error('Squad load error:', e);
-    status.textContent = 'Could not load squads: ' + e.message;
+    console.error('Player load error:', e);
+    status.textContent = 'Could not load players: ' + e.message;
   }
 }
 
-function buildGroupFilter(teams) {
+function buildFilters(teams) {
+  // Group filter
+  const groupSel = document.getElementById('filter-group');
   const letters = [...new Set(teams.map(t => t.group_letter))].sort();
-  const wrap = document.getElementById('group-filter');
-  wrap.innerHTML = ['ALL', ...letters].map(g =>
-    `<button class="gf-btn${g==='ALL'?' active':''}" onclick="setGroup('${g}')">${g==='ALL'?'All groups':'Group '+g}</button>`
-  ).join('');
-}
-
-function setGroup(g) {
-  activeGroup = g;
-  document.querySelectorAll('.gf-btn').forEach(b => b.classList.toggle('active', b.textContent === (g==='ALL'?'All groups':'Group '+g)));
-  renderSquads();
-}
-
-function filterSquads() { renderSquads(); }
-
-function renderSquads() {
-  const grid = document.getElementById('squad-grid');
-  const q = document.getElementById('squad-search').value.trim().toLowerCase();
-
-  // Group players by team
-  const byTeam = {};
-  allPlayers.forEach(p => {
-    if (!byTeam[p.team_name]) byTeam[p.team_name] = [];
-    byTeam[p.team_name].push(p);
+  letters.forEach(l => {
+    const o = document.createElement('option');
+    o.value = l; o.textContent = 'Group ' + l;
+    groupSel.appendChild(o);
   });
+}
 
-  // Filter teams
-  let teams = allTeamsData.filter(t => {
-    if (activeGroup !== 'ALL' && t.group_letter !== activeGroup) return false;
-    if (q) {
-      const matchTeam = t.name.toLowerCase().includes(q);
-      const matchPlayer = (byTeam[t.name] || []).some(p => p.name.toLowerCase().includes(q));
-      return matchTeam || matchPlayer;
-    }
+function onGroupChange() {
+  // Rebuild team dropdown based on selected group
+  const grp = document.getElementById('filter-group').value;
+  const teamSel = document.getElementById('filter-team');
+  teamSel.innerHTML = '<option value="">All teams</option>';
+  const filtered = grp ? allTeamsData.filter(t => t.group_letter === grp) : allTeamsData;
+  filtered.forEach(t => {
+    const flag = FLAG_MAP[t.name] || '';
+    const o = document.createElement('option');
+    o.value = t.name; o.textContent = flag + ' ' + t.name;
+    teamSel.appendChild(o);
+  });
+  renderPlayers();
+}
+
+function sortBy(col) {
+  if (sortCol === col) { sortAsc = !sortAsc; }
+  else { sortCol = col; sortAsc = col === 'name'; }
+  // Update header classes
+  document.querySelectorAll('.player-table th').forEach(th => {
+    th.classList.remove('sorted','asc');
+  });
+  const ths = document.querySelectorAll('.player-table th');
+  const cols = ['shirt_number','name','position','team_name','club','goals','assists','yellow_cards','red_cards'];
+  const idx = cols.indexOf(col);
+  if (idx >= 0 && ths[idx]) {
+    ths[idx].classList.add('sorted');
+    if (sortAsc) ths[idx].classList.add('asc');
+  }
+  renderPlayers();
+}
+
+function renderPlayers() {
+  const q     = document.getElementById('player-search').value.trim().toLowerCase();
+  const grp   = document.getElementById('filter-group').value;
+  const team  = document.getElementById('filter-team').value;
+  const pos   = document.getElementById('filter-pos').value;
+  const meta  = document.getElementById('player-meta');
+  const tbody = document.getElementById('player-tbody');
+
+  // Build team→group lookup
+  const teamGroup = {};
+  allTeamsData.forEach(t => teamGroup[t.name] = t.group_letter);
+
+  // Filter
+  let players = allPlayers.filter(p => {
+    if (q    && !p.name.toLowerCase().includes(q) && !p.club.toLowerCase().includes(q)) return false;
+    if (grp  && teamGroup[p.team_name] !== grp) return false;
+    if (team && p.team_name !== team) return false;
+    if (pos  && p.position !== pos) return false;
     return true;
   });
 
-  grid.innerHTML = teams.map(team => {
-    const players = byTeam[team.name] || [];
-    const flag = FLAG_MAP[team.name] || team.flag_emoji || '🏳';
-    const isNorway = team.name === 'Norway';
+  // Sort
+  players.sort((a, b) => {
+    let av = a[sortCol], bv = b[sortCol];
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return sortAsc ? -1 : 1;
+    if (av > bv) return sortAsc ? 1 : -1;
+    return 0;
+  });
 
-    // Filter players if search active
-    const filtered = q
-      ? players.filter(p => p.name.toLowerCase().includes(q) || team.name.toLowerCase().includes(q))
-      : players;
+  meta.textContent = players.length === allPlayers.length
+    ? `${allPlayers.length} players`
+    : `${players.length} of ${allPlayers.length} players`;
 
-    const byPos = {};
-    POS_ORDER.forEach(pos => byPos[pos] = []);
-    filtered.forEach(p => { if (byPos[p.position]) byPos[p.position].push(p); });
-
-    const posHtml = POS_ORDER.map(pos => {
-      if (!byPos[pos].length) return '';
-      return `<div class="squad-pos-group">
-        <div class="squad-pos-label">${POS_LABELS[pos]}</div>
-        ${byPos[pos].map(p => `
-          <div class="squad-player-row">
-            <div class="squad-num">${p.shirt_number}</div>
-            <div class="squad-name">${p.name}</div>
-            <div class="squad-club">${p.club}</div>
-          </div>`).join('')}
-      </div>`;
-    }).join('');
-
-    return `<div class="squad-team-card${isNorway?' norway':''}" id="squad-${team.name.replace(/[^a-zA-Z]/g,'_')}">
-      <div class="squad-team-hdr" onclick="toggleSquad('${team.name.replace(/'/g,"\'")}')">
-        <span class="squad-flag">${flag}</span>
-        <div>
-          <div class="squad-team-name">${team.name}${isNorway?' 🇳🇴':''}</div>
-          <div class="squad-team-meta">Group ${team.group_letter} · ${filtered.length} players</div>
-        </div>
-        <span class="squad-toggle">▼</span>
-      </div>
-      <div class="squad-player-list">${posHtml}</div>
-    </div>`;
-  }).join('');
-
-  // Auto-open if search active and only one team matches
-  if (q && teams.length === 1) {
-    const card = grid.querySelector('.squad-team-card');
-    if (card) { card.classList.add('open'); }
+  if (players.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--dim);padding:24px">No players found</td></tr>`;
+    return;
   }
-}
 
-function toggleSquad(teamName) {
-  const id = 'squad-' + teamName.replace(/[^a-zA-Z]/g,'_');
-  const card = document.getElementById(id);
-  if (card) card.classList.toggle('open');
+  const flag = name => FLAG_MAP[name] || '';
+  tbody.innerHTML = players.map(p => {
+    const isNorway = p.team_name === 'Norway';
+    const stat = (v, warn) => {
+      const nz = v > 0;
+      const color = warn && nz ? warn : '';
+      return `<td class="pt-stat ${nz?'nonzero':'zero'}" style="${color?'color:'+color:''}">${nz ? v : '—'}</td>`;
+    };
+    return `<tr class="${isNorway?'norway-row':''}">
+      <td class="pt-num">${p.shirt_number}</td>
+      <td class="pt-name">${p.name}</td>
+      <td><span class="pt-pos pos-${p.position}">${p.position}</span></td>
+      <td class="pt-team">${flag(p.team_name)} ${p.team_name}</td>
+      <td class="pt-club">${p.club || '—'}</td>
+      ${stat(p.goals || 0)}
+      ${stat(p.assists || 0)}
+      ${stat(p.yellow_cards || 0, '#f0b429')}
+      ${stat(p.red_cards || 0, '#e03434')}
+    </tr>`;
+  }).join('');
 }
 
 loadSquads();
