@@ -37,7 +37,7 @@ Return ONLY valid JSON, no markdown, no explanation. Use this exact structure:
       {"name": "Mexico", "pld": 2, "w": 2, "d": 0, "l": 0, "gf": 4, "ga": 1, "pts": 6}
     ]
   },
-  "top_scorers": [
+  "scorers": [
     {"name": "Erling Haaland", "team": "Norway", "goals": 3, "assists": 1}
   ],
   "bookings": [
@@ -46,6 +46,8 @@ Return ONLY valid JSON, no markdown, no explanation. Use this exact structure:
 }
 
 Only include games with a known result. Include all 12 groups A-L with all 4 teams each sorted by pts desc then GD desc.
+For "scorers": include EVERY player who has scored or assisted in the tournament so far, not just the top ones. Include own goals credited to the correct team's tally. This is critical — the total goals across all scorers must match the total GF across all groups.
+For "bookings": include EVERY player who has received a yellow or red card.
 Game IDs: 1=Mexico vs South Africa, 2=Canada vs Bosnia, 3=Brazil vs Morocco, 4=Netherlands vs Japan, 5=Belgium vs Egypt, 6=Iraq vs Norway, 7=England vs Croatia, 8=Mexico vs Korea, 9=USA vs Australia, 10=Germany vs Cote d'Ivoire, 11=Spain vs Saudi Arabia, 12=Norway vs Senegal, 13=England vs Ghana, 14=Scotland vs Brazil, 15=Ecuador vs Germany, 16=Norway vs France.`
 
     l('Calling Anthropic API with web search…')
@@ -87,7 +89,7 @@ Game IDs: 1=Mexico vs South Africa, 2=Canada vs Bosnia, 3=Brazil vs Morocco, 4=N
     let playerUpdates = 0
     const playerMap: Record<string, any> = {}
 
-    for (const p of (parsed.top_scorers || [])) {
+    for (const p of (parsed.scorers || [])) {
       const key = p.name.toLowerCase()
       playerMap[key] = { ...playerMap[key], name: p.name, team: p.team, goals: p.goals || 0, assists: p.assists || 0 }
     }
