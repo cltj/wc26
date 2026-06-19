@@ -65,6 +65,7 @@ tr.norway-row td { border-left:2px solid var(--norway); }
           <th onclick="sortBy('team_name')">Team</th>
           <th onclick="sortBy('club')">Club</th>
           <th onclick="sortBy('goals')"    title="Goals">⚽</th>
+          <th onclick="sortBy('own_goals')" title="Own goals">OG</th>
           <th onclick="sortBy('assists')"  title="Assists">🎯</th>
           <th onclick="sortBy('yellow_cards')" title="Yellow cards">🟨</th>
           <th onclick="sortBy('red_cards')"    title="Red cards">🟥</th>
@@ -82,6 +83,65 @@ tr.norway-row td { border-left:2px solid var(--norway); }
 injectNav('players');
 let allPlayers=[], allTeamsData=[], sortCol='name', sortAsc=true;
 
+// Map API team names to Supabase team names
+const SB_NAME_MAP = {
+  'United States':'USA','Turkey':'Türkiye','Czech Republic':'Czechia',
+  'Bosnia and Herzegovina':'Bosnia & Herz.','Ivory Coast':"Côte d'Ivoire",
+  'Iran':'IR Iran','Cape Verde':'Cabo Verde','Democratic Republic of the Congo':'DR Congo'
+};
+
+function parseScorersFromGames(gamesData) {
+  const games = Array.isArray(gamesData) ? gamesData : (gamesData.games || []);
+  const finished = games.filter(g => g.finished === 'TRUE');
+  // goalMap: { "teamName|normalizedPlayerName" : { goals, own_goals } }
+  const goalMap = {};
+
+  for (const g of finished) {
+    for (const [side, teamKey] of [['home_scorers','home_team_name_en'], ['away_scorers','away_team_name_en']]) {
+      const raw = g[side];
+      if (!raw || raw === 'null') continue;
+      // Match both curly and straight quotes
+      const scorers = raw.match(/[\u201c\u201d"""]([^"\u201c\u201d"""]+)[\u201c\u201d"""]/g) || [];
+      const apiTeam = g[teamKey];
+      const apiOpp = teamKey === 'home_team_name_en' ? g.away_team_name_en : g.home_team_name_en;
+
+      for (let s of scorers) {
+        s = s.replace(/^[\u201c\u201d"""]|[\u201c\u201d"""]$/g, ''); // strip quotes
+        const og = s.includes('(OG)');
+        // For OG: the player belongs to the opposing team
+        const team = SB_NAME_MAP[og ? apiOpp : apiTeam] || (og ? apiOpp : apiTeam);
+        // Extract player name (strip minute, penalty, OG markers)
+        let name = s.replace(/\s*\d+['\u2019`].*$/, '').replace(/[\u202b]/g, '').trim();
+        const key = team + '|' + name.toLowerCase();
+        if (!goalMap[key]) goalMap[key] = { team, name, goals: 0, own_goals: 0 };
+        if (og) goalMap[key].own_goals++;
+        else goalMap[key].goals++;
+      }
+    }
+  }
+  return goalMap;
+}
+
+function matchPlayerToScorer(player, goalMap) {
+  // Try exact team + name substring match
+  const team = player.team_name;
+  for (const [key, data] of Object.entries(goalMap)) {
+    if (data.team !== team) continue;
+    const scorerName = data.name.toLowerCase();
+    const playerName = player.name.toLowerCase();
+    // Match: scorer last name matches player last name, or scorer name is contained in player name
+    const scorerParts = scorerName.replace(/[.]/g, '').split(/\s+/);
+    const scorerLast = scorerParts[scorerParts.length - 1];
+    const playerParts = playerName.split(/\s+/);
+    const playerLast = playerParts[playerParts.length - 1];
+    // Check last name match (handles "F. Balogun" -> "Folarin Balogun")
+    if (scorerLast === playerLast && scorerLast.length > 2) return data;
+    // Check full name match (handles "Erling Haaland" -> "Erling Haaland")
+    if (playerName.includes(scorerName) || scorerName.includes(playerName)) return data;
+  }
+  return null;
+}
+
 async function loadAll() {
   const status = document.getElementById('p-status');
   try {
@@ -94,6 +154,36 @@ async function loadAll() {
       from+=500;
     }
     allTeamsData = await sb('teams?select=name,group_letter&order=group_letter,name');
+
+    // Fetch live goal data from worldcup26.ir
+    let goalMap = {};
+    try {
+      const res = await fetch('https://corsproxy.io/?url=https://worldcup26.ir/get/games');
+      if (res.ok) {
+        const gamesData = await res.json();
+        goalMap = parseScorersFromGames(gamesData);
+      }
+    } catch(e) {}
+
+    // Merge live goal stats into player data
+    const hasLiveData = Object.keys(goalMap).length > 0;
+    if (hasLiveData) {
+      // Reset all goals/OGs first so we use live data as source of truth
+      p.forEach(pl => { pl.goals = 0; pl.own_goals = 0; });
+      // Match scorers to players
+      const matched = new Set();
+      for (const pl of p) {
+        const scorer = matchPlayerToScorer(pl, goalMap);
+        if (scorer) {
+          pl.goals = scorer.goals;
+          pl.own_goals = scorer.own_goals;
+          matched.add(scorer.team + '|' + scorer.name.toLowerCase());
+        }
+      }
+    } else {
+      p.forEach(pl => { pl.own_goals = 0; });
+    }
+
     allPlayers = p;
     populateTeamDropdown('');
     status.style.display='none';
@@ -127,7 +217,7 @@ const teamGroup = () => {
 function sortBy(col){
   if(sortCol===col){sortAsc=!sortAsc;}else{sortCol=col;sortAsc=col==='name';}
   document.querySelectorAll('th').forEach(th=>{th.classList.remove('sorted','asc');});
-  const cols=['shirt_number','name','position','team_name','club','goals','assists','yellow_cards','red_cards'];
+  const cols=['shirt_number','name','position','team_name','club','goals','own_goals','assists','yellow_cards','red_cards'];
   const th=document.querySelectorAll('th')[cols.indexOf(col)];
   if(th){th.classList.add('sorted');if(sortAsc)th.classList.add('asc');}
   render();
@@ -162,7 +252,7 @@ function render(){
 
   const tbody=document.getElementById('p-tbody');
   if(!players.length){
-    tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--dim);padding:24px">No players found</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--dim);padding:24px">No players found</td></tr>`;
     return;
   }
 
@@ -180,6 +270,7 @@ function render(){
       <td class="td-team">${FLAG_MAP[p.team_name]||''} ${p.team_name}</td>
       <td class="td-club">${p.club||'—'}</td>
       ${stat(p.goals)}
+      ${stat(p.own_goals)}
       ${stat(p.assists)}
       ${stat(p.yellow_cards,'#f0b429')}
       ${stat(p.red_cards,'#e03434')}
