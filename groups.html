@@ -8,8 +8,23 @@
 <style>
 .groups-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(295px, 1fr)); gap: 12px; }
 .groups-meta { font-size: 11px; color: var(--dim); margin-bottom: 14px; }
-.groups-meta a { color: var(--gold); text-decoration: none; }
 .loading { color: var(--dim); font-size: 13px; text-align: center; padding: 40px; }
+.best3-section { margin-top: 28px; }
+.best3-title {
+  font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:.06em;
+  color:var(--gold); margin-bottom:10px; display:flex; align-items:center; gap:10px;
+}
+.best3-title::after { content:''; flex:1; height:1px; background:var(--border); }
+.best3-table { width:100%; border-collapse:collapse; font-size:12px; }
+.best3-table th {
+  background:#0d3320; color:var(--dim); font-weight:700; font-size:10px;
+  letter-spacing:.08em; text-transform:uppercase; padding:8px 10px; text-align:left;
+}
+.best3-table td { padding:8px 10px; border-bottom:1px solid var(--border); }
+.best3-table tr.qualify td { border-left:2px solid var(--green); }
+.best3-table tr.eliminated td { opacity:.4; }
+.best3-table .td-grp { font-family:'Bebas Neue',sans-serif; color:var(--gold); font-size:14px; }
+.best3-table .td-stat { font-family:'JetBrains Mono',monospace; color:var(--dim); text-align:center; }
 </style>
 </head>
 <body>
@@ -20,11 +35,24 @@
     <div class="subtitle">12 groups · 48 teams · Top 2 + 8 best 3rd qualify</div>
   </div>
 
-  <div class="groups-meta" id="groups-meta">Loading live standings…</div>
-  <div class="groups-grid" id="groups-grid"><div class="loading">⏳ Fetching standings…</div></div>
+  <div class="groups-meta" id="groups-meta">Loading standings…</div>
+  <div class="groups-grid" id="groups-grid"><div class="loading">Loading…</div></div>
+
+  <div class="best3-section" id="best3-section" style="display:none">
+    <div class="best3-title">8 Best Third-Place Teams</div>
+    <div style="overflow-x:auto">
+      <table class="best3-table">
+        <thead><tr>
+          <th>Grp</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th></th>
+        </tr></thead>
+        <tbody id="best3-tbody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <script src="shared_constants.js"></script>
+<script src="shared_standings.js"></script>
 <script src="shared_nav.js"></script>
 <script>
 injectNav('groups');
@@ -33,114 +61,79 @@ async function loadGroups() {
   const meta = document.getElementById('groups-meta');
   const grid = document.getElementById('groups-grid');
 
-  // Try worldcup26.ir via corsproxy
-  let data = null, teamsData = null;
   try {
-    const [gRes, tRes] = await Promise.all([
-      fetch('https://corsproxy.io/?url=https://worldcup26.ir/get/groups'),
-      fetch('https://corsproxy.io/?url=https://worldcup26.ir/get/teams')
+    const [teams, schedule] = await Promise.all([
+      sb('teams?select=name,group_letter&order=group_letter,name'),
+      sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id')
     ]);
-    if (gRes.ok) data = await gRes.json();
-    if (tRes.ok) teamsData = await tRes.json();
-  } catch(e) {}
 
-  if (data) {
-    renderFromAPI(data, teamsData);
-    meta.innerHTML = `Live standings via <a href="https://worldcup26.ir" target="_blank">worldcup26.ir</a> · 🟢 qualifies automatically · 🟡 possible best 3rd`;
-  } else {
-    // Fallback: static standings
-    renderStatic();
-    meta.innerHTML = `Standings as of 17 Jun (live fetch unavailable) · 🟢 qualifies · 🟡 possible 3rd`;
+    const groups = computeStandings(teams, schedule);
+    const qualGroups = qualifyingThirdGroups(groups);
+
+    grid.innerHTML = '';
+    const letters = Object.keys(groups).sort();
+    letters.forEach(letter => {
+      grid.appendChild(buildGroupCard(letter, groups[letter], qualGroups));
+    });
+
+    const ft = schedule.filter(m => m.status === 'FT' && m.group_name).length;
+    meta.textContent = `${ft} of 72 matches played · Standings from Supabase · 🟢 qualifies · 🟡 possible best 3rd`;
+
+    // Render best 3rd-place table
+    renderBest3rd(groups, qualGroups);
+  } catch(e) {
+    grid.innerHTML = `<div class="loading">Error: ${e.message}</div>`;
   }
 }
 
-function renderFromAPI(data, teamsData) {
-  // Build team_id → name map from teams API
-  const teamMap = {};
-  const apiTeams = teamsData ? (Array.isArray(teamsData) ? teamsData : (teamsData.teams || [])) : [];
-  apiTeams.forEach(t => { teamMap[t.id] = t.name_en; });
-
-  const grid = document.getElementById('groups-grid');
-  grid.innerHTML = '';
-  const groups = Array.isArray(data) ? data : (data.groups || []);
-  // Sort groups alphabetically by name
-  groups.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  groups.forEach(grp => {
-    const letter = grp.name?.replace('Group ','') || grp.letter || '?';
-    const teams  = grp.teams || grp.standings || [];
-    // Map team_id to name and normalize field names
-    const mapped = teams.map(t => ({
-      name: t.name || teamMap[t.team_id] || `Team ${t.team_id}`,
-      pld: parseInt(t.mp||t.played||t.p||0),
-      w: parseInt(t.w||t.won||0),
-      d: parseInt(t.d||t.draw||0),
-      l: parseInt(t.l||t.lose||0),
-      gf: parseInt(t.gf||t.goals_for||0),
-      ga: parseInt(t.ga||t.goals_against||0),
-      pts: parseInt(t.pts||t.points||0)
-    }));
-    const sorted = [...mapped].sort((a,b) => {
-      if (b.pts!==a.pts) return b.pts-a.pts;
-      const gda = a.gf-a.ga, gdb = b.gf-b.ga;
-      return gdb-gda;
-    });
-    grid.appendChild(buildGroupCard(letter, sorted));
-  });
-}
-
-function buildGroupCard(letter, teams) {
-  const isNorwayGroup = teams.some(t => (t.name||t.team||'').toLowerCase()==='norway');
+function buildGroupCard(letter, teams, qualGroups) {
+  const isNorwayGroup = teams.some(t => t.name.toLowerCase() === 'norway');
   const div = document.createElement('div');
-  div.className = `group-card${isNorwayGroup?' norway':''}`;
+  div.className = `group-card${isNorwayGroup ? ' norway' : ''}`;
   div.innerHTML = `
-    <div class="group-hdr">Group ${letter}${isNorwayGroup?' 🇳🇴':''}</div>
+    <div class="group-hdr">Group ${letter}${isNorwayGroup ? ' 🇳🇴' : ''}</div>
     <div class="group-col-hdr">
       <span style="padding-left:10px">Team</span>
       <span>P</span><span>W</span><span>D</span><span>L</span><span>GF</span><span>GA</span><span>Pts</span>
     </div>
-    ${teams.map((t,i) => {
-      const name = t.name||t.team||'?';
-      const pld = t.played||t.p||t.pld||0;
-      const w   = t.won||t.w||0, d=t.draw||t.d||0, l=t.lose||t.l||0;
-      const gf  = t.goals_for||t.gf||0, ga=t.goals_against||t.ga||0;
-      const pts = t.points||t.pts||0;
-      const isNor = name.toLowerCase()==='norway';
-      let cls='group-row', bar='';
-      if (i<2&&pld>0){cls+=' qualify';bar='<span class="qbar qbar-g"></span>';}
-      else if(i===2&&pld>0){cls+=' maybe';bar='<span class="qbar qbar-y"></span>';}
+    ${teams.map((t, i) => {
+      const isNor = t.name.toLowerCase() === 'norway';
+      let cls = 'group-row', bar = '';
+      if (i < 2 && t.pld > 0) { cls += ' qualify'; bar = '<span class="qbar qbar-g"></span>'; }
+      else if (i === 2 && t.pld > 0) {
+        if (qualGroups.has(letter)) { cls += ' maybe'; bar = '<span class="qbar qbar-y"></span>'; }
+      }
       return `<div class="${cls}">${bar}
-        <span style="padding-left:10px;font-weight:${isNor?700:400}">${FLAG_MAP[name]||''} ${name}${isNor?' 🇳🇴':''}</span>
-        <span style="color:var(--dim)">${pld}</span><span style="color:var(--dim)">${w}</span>
-        <span style="color:var(--dim)">${d}</span><span style="color:var(--dim)">${l}</span>
-        <span style="color:var(--dim)">${gf}</span><span style="color:var(--dim)">${ga}</span>
-        <span class="gpts${pts===0?' zero':''}">${pts}</span>
+        <span style="padding-left:10px;font-weight:${isNor ? 700 : 400}">${FLAG_MAP[t.name] || ''} ${t.name}${isNor ? ' 🇳🇴' : ''}</span>
+        <span style="color:var(--dim)">${t.pld}</span><span style="color:var(--dim)">${t.w}</span>
+        <span style="color:var(--dim)">${t.d}</span><span style="color:var(--dim)">${t.l}</span>
+        <span style="color:var(--dim)">${t.gf}</span><span style="color:var(--dim)">${t.ga}</span>
+        <span class="gpts${t.pts === 0 ? ' zero' : ''}">${t.pts}</span>
       </div>`;
     }).join('')}`;
   return div;
 }
 
-function renderStatic() {
-  const GROUPS = {
-    A:[['Mexico',1,1,0,0,2,0,3],['South Korea',1,1,0,0,2,1,3],['Czechia',1,0,0,1,1,2,0],['South Africa',1,0,0,1,0,2,0]],
-    B:[['Canada',1,0,1,0,1,1,1],['Bosnia & Herz.',1,0,1,0,1,1,1],['Qatar',1,0,1,0,1,1,1],['Switzerland',1,0,1,0,1,1,1]],
-    C:[['Scotland',1,1,0,0,1,0,3],['Brazil',1,0,1,0,1,1,1],['Morocco',1,0,1,0,1,1,1],['Haiti',1,0,0,1,0,1,0]],
-    D:[['USA',1,1,0,0,4,1,3],['Australia',1,1,0,0,2,0,3],['Paraguay',1,0,0,1,1,4,0],['Türkiye',1,0,0,1,0,2,0]],
-    E:[['Germany',1,1,0,0,7,1,3],["Côte d'Ivoire",1,1,0,0,1,0,3],['Ecuador',1,0,0,1,0,1,0],['Curaçao',1,0,0,1,1,7,0]],
-    F:[['Sweden',1,1,0,0,5,1,3],['Netherlands',1,0,1,0,2,2,1],['Japan',1,0,1,0,2,2,1],['Tunisia',1,0,0,1,1,5,0]],
-    G:[['Belgium',1,0,1,0,1,1,1],['Egypt',1,0,1,0,1,1,1],['IR Iran',1,0,1,0,2,2,1],['New Zealand',1,0,1,0,2,2,1]],
-    H:[['Saudi Arabia',1,0,1,0,1,1,1],['Uruguay',1,0,1,0,1,1,1],['Cabo Verde',1,0,1,0,0,0,1],['Spain',1,0,1,0,0,0,1]],
-    I:[['France',1,1,0,0,3,1,3],['Norway',1,1,0,0,4,1,3],['Senegal',1,0,0,1,1,3,0],['Iraq',1,0,0,1,1,4,0]],
-    J:[['Argentina',1,1,0,0,3,0,3],['Austria',1,1,0,0,3,1,3],['Jordan',1,0,0,1,1,3,0],['Algeria',1,0,0,1,0,3,0]],
-    K:[['Portugal',0,0,0,0,0,0,0],['Colombia',0,0,0,0,0,0,0],['DR Congo',0,0,0,0,0,0,0],['Uzbekistan',0,0,0,0,0,0,0]],
-    L:[['England',0,0,0,0,0,0,0],['Croatia',0,0,0,0,0,0,0],['Ghana',0,0,0,0,0,0,0],['Panama',0,0,0,0,0,0,0]]
-  };
-  const grid = document.getElementById('groups-grid');
-  grid.innerHTML = '';
-  Object.entries(GROUPS).forEach(([letter, teams]) => {
-    const sorted = [...teams].sort((a,b)=>b[7]-a[7]||(b[5]-b[6])-(a[5]-a[6])||b[5]-a[5]);
-    const mapped = sorted.map(t => ({name:t[0],pld:t[1],w:t[2],d:t[3],l:t[4],gf:t[5],ga:t[6],pts:t[7]}));
-    grid.appendChild(buildGroupCard(letter, mapped));
-  });
+function renderBest3rd(groups, qualGroups) {
+  const thirds = bestThirdPlaces(groups);
+  // Only show if at least one 3rd-place team has played
+  if (!thirds.some(t => t.pld > 0)) return;
+
+  document.getElementById('best3-section').style.display = '';
+  document.getElementById('best3-tbody').innerHTML = thirds.map((t, i) => {
+    const qual = i < 8;
+    const gd = t.gf - t.ga;
+    return `<tr class="${qual ? 'qualify' : 'eliminated'}">
+      <td class="td-grp">${t.fromGroup}</td>
+      <td style="font-weight:600">${FLAG_MAP[t.name] || ''} ${t.name}</td>
+      <td class="td-stat">${t.pld}</td><td class="td-stat">${t.w}</td>
+      <td class="td-stat">${t.d}</td><td class="td-stat">${t.l}</td>
+      <td class="td-stat">${t.gf}</td><td class="td-stat">${t.ga}</td>
+      <td class="td-stat" style="color:${gd > 0 ? 'var(--green)' : gd < 0 ? '#e07070' : 'var(--dim)'}">${gd > 0 ? '+' : ''}${gd}</td>
+      <td class="td-stat" style="font-weight:700;color:var(--white)">${t.pts}</td>
+      <td style="font-size:10px">${qual ? '✅ Qualifies' : ''}</td>
+    </tr>`;
+  }).join('');
 }
 
 loadGroups();

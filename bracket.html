@@ -19,32 +19,14 @@
   </div>
 
   <p class="bracket-note">Group stage ends 27 Jun · R32 starts 28 Jun · Final 19 Jul at MetLife Stadium, New York</p>
-  <div id="bracket-wrap"><div id="bracket"></div></div>
+  <div id="bracket-wrap"><div id="bracket" style="color:var(--dim);text-align:center;padding:40px">Loading bracket…</div></div>
 </div>
 
 <script src="shared_constants.js"></script>
+<script src="shared_standings.js"></script>
 <script src="shared_nav.js"></script>
 <script>
 injectNav('bracket');
-
-const R32 = [
-  ['2nd A','TBD','2nd B','TBD','28 Jun'],
-  ['1st E','TBD','3rd A/B/C/D/F','TBD','28 Jun'],
-  ['1st F','TBD','2nd C','TBD','28 Jun'],
-  ['1st C','TBD','2nd F','TBD','29 Jun'],
-  ['1st I','TBD','3rd C/D/F/G/H','TBD','29 Jun'],
-  ['2nd E','TBD','2nd I','TBD','29 Jun'],
-  ['1st A','TBD','3rd C/E/F/H/I','TBD','30 Jun'],
-  ['1st L','TBD','3rd E/H/I/J/K','TBD','30 Jun'],
-  ['1st D','TBD','3rd B/E/F/I/J','TBD','1 Jul'],
-  ['1st G','TBD','3rd A/E/H/I/J','TBD','1 Jul'],
-  ['2nd K','TBD','2nd L','TBD','2 Jul'],
-  ['1st H','TBD','2nd J','TBD','2 Jul'],
-  ['1st B','TBD','3rd E/F/G/I/J','TBD','2 Jul'],
-  ['1st J','TBD','2nd H','TBD','2 Jul'],
-  ['1st K','TBD','3rd D/E/I/J/L','TBD','2 Jul'],
-  ['2nd D','TBD','2nd G','TBD','2 Jul'],
-];
 
 const ROUNDS = [
   {name:'Round of 32', dates:'28 Jun–2 Jul'},
@@ -54,8 +36,35 @@ const ROUNDS = [
   {name:'Final', dates:'19 Jul'},
 ];
 
-function buildBracket() {
+async function loadBracket() {
+  try {
+    const [teams, schedule] = await Promise.all([
+      sb('teams?select=name,group_letter&order=group_letter,name'),
+      sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id')
+    ]);
+
+    const groups = computeStandings(teams, schedule);
+    const qualGroups = qualifyingThirdGroups(groups);
+
+    // Resolve R32 slots to actual team names where possible
+    const r32Resolved = R32_STRUCTURE.map(slot => ({
+      topLabel: slot.top,
+      topTeam: resolveSlot(slot.top, groups, qualGroups),
+      botLabel: slot.bot,
+      botTeam: resolveSlot(slot.bot, groups, qualGroups),
+      date: slot.date,
+    }));
+
+    buildBracket(r32Resolved);
+  } catch(e) {
+    document.getElementById('bracket').innerHTML =
+      `<div style="color:var(--dim);text-align:center;padding:40px">Error: ${e.message}</div>`;
+  }
+}
+
+function buildBracket(r32Data) {
   const wrap = document.getElementById('bracket');
+  wrap.innerHTML = '';
   const SH=52,GAP=8,CW=148,CG=32,HDRH=44;
   const matchH=SH*2+GAP*2+8;
   const svgW=(CW+CG)*5+CG, svgH=16*matchH+HDRH+60;
@@ -63,6 +72,7 @@ function buildBracket() {
   svg.setAttribute('width',svgW); svg.setAttribute('height',svgH);
   svg.style.cssText='display:block;min-width:'+svgW+'px';
 
+  // Round headers
   ROUNDS.forEach((r,ri)=>{
     const x=CG+ri*(CW+CG);
     const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
@@ -89,9 +99,11 @@ function buildBracket() {
       Object.entries({x:x+8,y:my-6,fill:'#8a9aa0','font-size':8,'font-family':'Inter,sans-serif'}).forEach(([k,v])=>l.setAttribute(k,v));
       l.textContent=lbl; svg.appendChild(l);
       const n=document.createElementNS('http://www.w3.org/2000/svg','text');
-      const isTBD=name==='TBD';
+      const isTBD=!name;
+      const displayName = name || '—';
+      const flag = name ? (FLAG_MAP[name] || '') + ' ' : '';
       Object.entries({x:x+8,y:my+8,fill:isTBD?'#8a9aa0':'#f5f7f2','font-size':isTBD?10:11,'font-weight':isTBD?400:600,'font-family':'Inter,sans-serif'}).forEach(([k,v])=>n.setAttribute(k,v));
-      n.textContent=isTBD?'—':name; svg.appendChild(n);
+      n.textContent=isTBD?'—':flag+displayName; svg.appendChild(n);
     });
     return {rightX:x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8};
   }
@@ -104,49 +116,64 @@ function buildBracket() {
     svg.appendChild(p);
   }
 
-  const r32c=R32.map((m,i)=>drawMatch(CG,HDRH+matchH*i+matchH/2,m[0],m[1],m[2],m[3]));
+  // R32
+  const r32c = r32Data.map((m,i) =>
+    drawMatch(CG, HDRH+matchH*i+matchH/2, m.topLabel, m.topTeam, m.botLabel, m.botTeam)
+  );
+
+  // R16
   const r16x=CG+CW+CG, r16c=[];
   for(let i=0;i<8;i++){
     const t=r32c[i*2],b=r32c[i*2+1],yC=(t.centerY+b.centerY)/2;
-    drawMatch(r16x,yC,'W M'+(i*2+73),'TBD','W M'+(i*2+74),'TBD');
+    drawMatch(r16x,yC,'W M'+(i*2+1),'','W M'+(i*2+2),'');
     conn(t.rightX,t.topY,t.centerY,r16x,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,r16x,yC+SH/2+8);
     r16c.push({rightX:r16x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
   }
+
+  // QF
   const qfx=r16x+CW+CG, qfc=[];
   for(let i=0;i<4;i++){
     const t=r16c[i*2],b=r16c[i*2+1],yC=(t.centerY+b.centerY)/2;
-    drawMatch(qfx,yC,'W R16-'+(i*2+1),'TBD','W R16-'+(i*2+2),'TBD');
+    drawMatch(qfx,yC,'W R16-'+(i*2+1),'','W R16-'+(i*2+2),'');
     conn(t.rightX,t.topY,t.centerY,qfx,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,qfx,yC+SH/2+8);
     qfc.push({rightX:qfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
   }
+
+  // SF
   const sfx=qfx+CW+CG, sfc=[];
   for(let i=0;i<2;i++){
     const t=qfc[i*2],b=qfc[i*2+1],yC=(t.centerY+b.centerY)/2;
-    drawMatch(sfx,yC,'W QF-'+(i*2+1),'TBD','W QF-'+(i*2+2),'TBD');
+    drawMatch(sfx,yC,'W QF-'+(i*2+1),'','W QF-'+(i*2+2),'');
     conn(t.rightX,t.topY,t.centerY,sfx,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,sfx,yC+SH/2+8);
     sfc.push({rightX:sfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
   }
+
+  // Final
   const finx=sfx+CW+CG, finY=(sfc[0].centerY+sfc[1].centerY)/2;
-  drawMatch(finx,finY,'W SF-1','TBD','W SF-2','TBD');
+  drawMatch(finx,finY,'W SF-1','','W SF-2','');
   conn(sfc[0].rightX,sfc[0].topY,sfc[0].centerY,finx,finY-SH/2+8);
   conn(sfc[1].rightX,sfc[1].centerY,sfc[1].botY,finx,finY+SH/2+8);
-  const addTxt=(x,y,txt,fill,fs,fam)=>{
+
+  const addTxt=(x,y,txt,fill,fs)=>{
     const t=document.createElementNS('http://www.w3.org/2000/svg','text');
-    Object.entries({x,y,fill,'font-size':fs,'font-family':fam||'Bebas Neue,sans-serif','text-anchor':'middle','letter-spacing':1}).forEach(([k,v])=>t.setAttribute(k,v));
+    Object.entries({x,y,fill,'font-size':fs,'font-family':'Bebas Neue,sans-serif','text-anchor':'middle','letter-spacing':1}).forEach(([k,v])=>t.setAttribute(k,v));
     t.textContent=txt; svg.appendChild(t);
   };
-  addTxt(finx+CW/2,finY-SH-GAP-6,'🏆 FINAL · 19 Jul','#f0b429',10);
+  addTxt(finx+CW/2,finY-SH-GAP-6,'FINAL · 19 Jul','#f0b429',10);
+
+  // 3rd place match
   const thirdY=finY+SH*2+GAP*4;
-  drawMatch(finx,thirdY,'L SF-1','TBD','L SF-2','TBD');
-  addTxt(finx+CW/2,thirdY-SH-GAP-6,'🥉 3RD PLACE · 18 Jul','#c07840',10);
+  drawMatch(finx,thirdY,'L SF-1','','L SF-2','');
+  addTxt(finx+CW/2,thirdY-SH-GAP-6,'3RD PLACE · 18 Jul','#c07840',10);
+
   svg.setAttribute('height',Math.max(thirdY+SH+GAP+20,svgH));
   wrap.appendChild(svg);
 }
 
-buildBracket();
+loadBracket();
 </script>
 </body>
 </html>
