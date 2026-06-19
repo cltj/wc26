@@ -33,7 +33,7 @@ tr.norway-row td { border-left:2px solid var(--norway); }
   <div class="page-header">
     <div class="tourn-label">FIFA World Cup 2026</div>
     <h1>Player <span>Stats</span></h1>
-    <div class="subtitle">1,245 players · All 48 squads · Search & filter</div>
+    <div class="subtitle">1,248 players · All 48 squads · Search & filter</div>
   </div>
 
   <div class="controls">
@@ -108,21 +108,19 @@ const SCORER_FIXES = {
   'rvbn vargas|Switzerland': 'Ruben Vargas',
   'armin mhmich|Bosnia & Herz.': 'Armin Mahmic',
   'kail larin|Canada': 'Cyle Larin',
-  'mohamed almnai|Canada': 'Mohamed Almnai',
   'rvmanv ashmid|Austria': 'Romano Schmid',
-  'izn alarb|Austria': 'Izen Alarb',
   'mikhal sadilk|Czechia': 'Michal Sadilek',
   'dnil mvnvz|Colombia': 'Daniel Munoz',
   'lviiz diaz|Colombia': 'Luis Diaz',
   'khamintvn kampaz|Colombia': 'Jhaminton Campaz',
   'kalb iirnki|Ghana': 'Caleb Yirenkyi',
-  'abas bk fiz allh af|Uzbekistan': 'Abbas Fayzullayev',
-  'mohamed hany|Belgium': 'Mohamed Hany',
+  'abas bk fiz allh af|Uzbekistan': 'Abbosbek Fayzullaev',
   'izn alarb|Austria': 'David Alaba',
   'ali avlvan|Jordan': 'Ali Olwan',
   'y.ayari|Sweden': 'Yacine Ayari',
   'ramin rezaiian|IR Iran': 'Ramin Rezaeian',
   'leo ostigard|Norway': 'Leo Ostigard',
+  'abdulelah al-amri|Saudi Arabia': 'Abdulelah Ali A Alamri',
 };
 
 function parseScorersFromGames(gamesData) {
@@ -159,29 +157,33 @@ function parseScorersFromGames(gamesData) {
   return goalMap;
 }
 
+function matchName(playerNorm, playerParts, scorerNorm, scorerParts) {
+  const scorerLast = scorerParts[scorerParts.length - 1];
+  if (scorerLast.length >= 2 && playerParts.some(p => p === scorerLast)) return true;
+  if (playerNorm.includes(scorerNorm) || scorerNorm.includes(playerNorm)) return true;
+  if (scorerParts.length >= 2) {
+    const longParts = scorerParts.filter(p => p.length > 1);
+    if (longParts.length > 0 && longParts.every(p => playerParts.some(pp => pp === p || pp.startsWith(p)))) return true;
+  }
+  return false;
+}
+
 function matchAllScorers(player, goalMap) {
   const team = player.team_name;
   const playerNorm = norm(player.name);
   const playerParts = playerNorm.replace(/[.-]/g, ' ').split(/\s+/).filter(Boolean);
+  // Also match against name_on_shirt (e.g. "BRAUT HAALAND" matches "Haaland")
+  const shirtNorm = player.name_on_shirt ? norm(player.name_on_shirt) : '';
+  const shirtParts = shirtNorm ? shirtNorm.replace(/[.-]/g, ' ').split(/\s+/).filter(Boolean) : [];
   const results = [];
 
   for (const [key, data] of Object.entries(goalMap)) {
     if (data.team !== team) continue;
     const scorerNorm = norm(data.name);
     const scorerParts = scorerNorm.replace(/[.]/g, '').split(/\s+/).filter(Boolean);
-    const scorerLast = scorerParts[scorerParts.length - 1];
 
-    // 1. Any part of player name matches scorer's last name (min 2 chars for Korean names like "Oh")
-    if (scorerLast.length >= 2 && playerParts.some(p => p === scorerLast)) { results.push(data); continue; }
-
-    // 2. Full name containment
-    if (playerNorm.includes(scorerNorm) || scorerNorm.includes(playerNorm)) { results.push(data); continue; }
-
-    // 3. All significant scorer name parts appear in player name
-    if (scorerParts.length >= 2) {
-      const longParts = scorerParts.filter(p => p.length > 1);
-      if (longParts.length > 0 && longParts.every(p => playerParts.some(pp => pp === p || pp.startsWith(p)))) { results.push(data); continue; }
-    }
+    if (matchName(playerNorm, playerParts, scorerNorm, scorerParts)) { results.push(data); continue; }
+    if (shirtParts.length && matchName(shirtNorm, shirtParts, scorerNorm, scorerParts)) { results.push(data); continue; }
   }
   return results;
 }
