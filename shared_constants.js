@@ -20,14 +20,18 @@ const FLAG_MAP = {
   'Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴',
   'Portugal':'🇵🇹','DR Congo':'🇨🇩','Uzbekistan':'🇺🇿','Colombia':'🇨🇴',
   'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦',
+  // worldcup26.ir API name aliases
+  'Czech Republic':'🇨🇿','Bosnia and Herzegovina':'🇧🇦','United States':'🇺🇸',
+  'Turkey':'🇹🇷','Ivory Coast':'🇨🇮','Iran':'🇮🇷','Cape Verde':'🇨🇻',
+  'Democratic Republic of the Congo':'🇨🇩',
 };
 
 const PLAYER_PHOTOS = {
   'Eivind': `${BASE_URL}/eivind.jpeg`,
   'TJ':     `${BASE_URL}/tj.jpg`,
-  'Mari':   `${BASE_URL}/placeholder.jpg`,
+  'Mari':   `${BASE_URL}/mari.jpeg`,
   'Benny':  `${BASE_URL}/placeholder.jpg`,
-  'Martin': `${BASE_URL}/placeholder.jpg`,
+  'Martin': `${BASE_URL}/martin.png`,
 };
 
 // ── Supabase helpers ─────────────────────────────────────────────────────────

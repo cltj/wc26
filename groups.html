@@ -34,14 +34,18 @@ async function loadGroups() {
   const grid = document.getElementById('groups-grid');
 
   // Try worldcup26.ir via corsproxy
-  let data = null;
+  let data = null, teamsData = null;
   try {
-    const res = await fetch('https://corsproxy.io/?url=https://worldcup26.ir/get/groups');
-    if (res.ok) data = await res.json();
+    const [gRes, tRes] = await Promise.all([
+      fetch('https://corsproxy.io/?url=https://worldcup26.ir/get/groups'),
+      fetch('https://corsproxy.io/?url=https://worldcup26.ir/get/teams')
+    ]);
+    if (gRes.ok) data = await gRes.json();
+    if (tRes.ok) teamsData = await tRes.json();
   } catch(e) {}
 
   if (data) {
-    renderFromAPI(data);
+    renderFromAPI(data, teamsData);
     meta.innerHTML = `Live standings via <a href="https://worldcup26.ir" target="_blank">worldcup26.ir</a> · 🟢 qualifies automatically · 🟡 possible best 3rd`;
   } else {
     // Fallback: static standings
@@ -50,20 +54,34 @@ async function loadGroups() {
   }
 }
 
-function renderFromAPI(data) {
-  // worldcup26.ir returns groups as array of group objects
-  // Each group has: name, teams: [{name, played, won, draw, lose, goals_for, goals_against, points}]
+function renderFromAPI(data, teamsData) {
+  // Build team_id → name map from teams API
+  const teamMap = {};
+  const apiTeams = teamsData ? (Array.isArray(teamsData) ? teamsData : (teamsData.teams || [])) : [];
+  apiTeams.forEach(t => { teamMap[t.id] = t.name_en; });
+
   const grid = document.getElementById('groups-grid');
   grid.innerHTML = '';
   const groups = Array.isArray(data) ? data : (data.groups || []);
+  // Sort groups alphabetically by name
+  groups.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   groups.forEach(grp => {
     const letter = grp.name?.replace('Group ','') || grp.letter || '?';
     const teams  = grp.teams || grp.standings || [];
-    const sorted = [...teams].sort((a,b) => {
-      const pa = a.points||a.pts||0, pb = b.points||b.pts||0;
-      if (pb!==pa) return pb-pa;
-      const gda = (a.goals_for||a.gf||0)-(a.goals_against||a.ga||0);
-      const gdb = (b.goals_for||b.gf||0)-(b.goals_against||b.ga||0);
+    // Map team_id to name and normalize field names
+    const mapped = teams.map(t => ({
+      name: t.name || teamMap[t.team_id] || `Team ${t.team_id}`,
+      pld: parseInt(t.mp||t.played||t.p||0),
+      w: parseInt(t.w||t.won||0),
+      d: parseInt(t.d||t.draw||0),
+      l: parseInt(t.l||t.lose||0),
+      gf: parseInt(t.gf||t.goals_for||0),
+      ga: parseInt(t.ga||t.goals_against||0),
+      pts: parseInt(t.pts||t.points||0)
+    }));
+    const sorted = [...mapped].sort((a,b) => {
+      if (b.pts!==a.pts) return b.pts-a.pts;
+      const gda = a.gf-a.ga, gdb = b.gf-b.ga;
       return gdb-gda;
     });
     grid.appendChild(buildGroupCard(letter, sorted));
