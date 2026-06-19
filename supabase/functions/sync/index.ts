@@ -6,11 +6,13 @@ const corsHeaders = {
 }
 
 const API_HOST = 'https://v3.football.api-sports.io'
+const WC_LEAGUE_ID = 1 // FIFA World Cup — hardcoded to save a request
 
 // Map API-Football team names to our Supabase team names
 const TEAM_MAP: Record<string, string> = {
   'USA': 'USA',
   'South Korea': 'South Korea',
+  'Korea Republic': 'South Korea',
   'Bosnia And Herzegovina': 'Bosnia & Herz.',
   'Bosnia and Herzegovina': 'Bosnia & Herz.',
   'Ivory Coast': "Côte d'Ivoire",
@@ -24,7 +26,6 @@ const TEAM_MAP: Record<string, string> = {
   'Turkiye': 'Türkiye',
   'Czech Republic': 'Czechia',
   'Curacao': 'Curaçao',
-  'Korea Republic': 'South Korea',
 }
 
 function mapTeam(name: string): string {
@@ -38,6 +39,7 @@ Deno.serve(async (req) => {
 
   const log: string[] = []
   const l = (msg: string) => { log.push(msg); console.log(msg) }
+  let apiCalls = 0
 
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -45,14 +47,13 @@ Deno.serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SVC)
 
     // Read API key from Supabase Vault
-    const { data: secrets, error: vaultErr } = await supabase
+    const { data: secrets } = await supabase
       .rpc('get_secret', { secret_name: 'API_FOTBALL_KEY' })
 
     let API_KEY = ''
     if (secrets && secrets.length > 0) {
       API_KEY = secrets[0].secret
     } else {
-      // Fallback: try env var
       API_KEY = Deno.env.get('API_FOTBALL_KEY') || ''
     }
     if (!API_KEY) throw new Error('No API key found in vault (API_FOTBALL_KEY) or env')
@@ -66,41 +67,36 @@ Deno.serve(async (req) => {
       const res = await fetch(url.toString(), {
         headers: { 'x-apisports-key': API_KEY }
       })
+      apiCalls++
       if (!res.ok) throw new Error(`API ${endpoint}: ${res.status}`)
       const data = await res.json()
       if (data.errors && Object.keys(data.errors).length > 0) {
         throw new Error(`API ${endpoint}: ${JSON.stringify(data.errors)}`)
       }
+      l(`  API call #${apiCalls}: ${endpoint} (${data.results} results)`)
       return data.response
     }
 
-    // ── Step 1: Find FIFA World Cup 2026 league ID ────────────────────────
-    let leagueId = 1 // Default FIFA World Cup ID
-    try {
-      const leagues = await apiFetch('/leagues', { name: 'World Cup', type: 'cup' })
-      const wc = leagues.find((l: any) =>
-        l.league.name.includes('World Cup') && !l.league.name.includes('Women')
-        && !l.league.name.includes('Qualif') && !l.league.name.includes('U-')
-        && l.country?.name === 'World'
-      )
-      if (wc) {
-        leagueId = wc.league.id
-        l(`Found league: ${wc.league.name} (ID: ${leagueId})`)
-      } else {
-        l(`Using default league ID: ${leagueId}`)
-      }
-    } catch (e: any) {
-      l(`League lookup failed, using default ID ${leagueId}: ${e.message}`)
-    }
+    // ── Load sync state: which fixture events we've already processed ─────
+    const { data: stateRow } = await supabase
+      .from('sync_state')
+      .select('value')
+      .eq('key', 'processed_fixtures')
+      .single()
 
-    // ── Step 2: Fetch all fixtures ────────────────────────────────────────
+    const processedFixtures: Set<number> = new Set(
+      stateRow?.value?.fixture_ids || []
+    )
+    l(`Previously processed events for ${processedFixtures.size} fixtures`)
+
+    // ── Step 1: Fetch all fixtures (1 API call) ───────────────────────────
     const fixtures = await apiFetch('/fixtures', {
-      league: String(leagueId),
+      league: String(WC_LEAGUE_ID),
       season: '2026'
     })
     l(`Fetched ${fixtures.length} fixtures`)
 
-    // ── Step 3: Upsert into schedule table ────────────────────────────────
+    // ── Step 2: Upsert into schedule table ────────────────────────────────
     let schedUpdates = 0
     for (const f of fixtures) {
       const fix = f.fixture
@@ -108,7 +104,6 @@ Deno.serve(async (req) => {
       const goals = f.goals
       const stage = f.league.round || 'Group Stage'
 
-      // Determine status
       let status = 'scheduled'
       const shortStatus = fix.status?.short || ''
       if (['FT', 'AET', 'PEN'].includes(shortStatus)) status = 'FT'
@@ -116,14 +111,12 @@ Deno.serve(async (req) => {
       else if (['PST', 'SUSP', 'INT'].includes(shortStatus)) status = 'postponed'
       else if (['CANC', 'ABD', 'AWD', 'WO'].includes(shortStatus)) status = 'cancelled'
 
-      // Parse kickoff
       const kickoff = fix.date ? new Date(fix.date) : null
       const matchDate = kickoff ? kickoff.toISOString().slice(0, 10) : null
       const kickoffTime = kickoff
-        ? `${String(kickoff.getUTCHours()).padStart(2,'0')}:${String(kickoff.getUTCMinutes()).padStart(2,'0')}`
+        ? `${String(kickoff.getUTCHours()).padStart(2, '0')}:${String(kickoff.getUTCMinutes()).padStart(2, '0')}`
         : null
 
-      // Determine group name from round string (e.g. "Group A - 1")
       let groupName = ''
       if (stage.startsWith('Group')) {
         const gMatch = stage.match(/Group\s+([A-L])/)
@@ -149,7 +142,6 @@ Deno.serve(async (req) => {
         row.away_score = goals.away
       }
 
-      // Try to match existing row by home_team + away_team
       const { data: existing } = await supabase
         .from('schedule')
         .select('id')
@@ -167,12 +159,11 @@ Deno.serve(async (req) => {
     }
     l(`✓ ${schedUpdates} schedule rows synced`)
 
-    // ── Step 4: Update games table results (for prediction league) ────────
+    // ── Step 3: Update games table results (for prediction league) ────────
     const { data: games } = await supabase.from('games').select('id,home,away,result')
     let gameUpdates = 0
     if (games) {
       for (const game of games) {
-        // Find matching fixture
         const match = fixtures.find((f: any) => {
           const h = mapTeam(f.teams.home.name)
           const a = mapTeam(f.teams.away.name)
@@ -192,22 +183,32 @@ Deno.serve(async (req) => {
     }
     l(`✓ ${gameUpdates} game results updated`)
 
-    // ── Step 5: Fetch events for finished matches → update player stats ──
+    // ── Step 4: Fetch events ONLY for newly finished matches ──────────────
     const finishedFixtures = fixtures.filter((f: any) =>
       ['FT', 'AET', 'PEN'].includes(f.fixture.status?.short || '')
     )
+    const newlyFinished = finishedFixtures.filter((f: any) =>
+      !processedFixtures.has(f.fixture.id)
+    )
+    l(`Finished: ${finishedFixtures.length} total, ${newlyFinished.length} new to process`)
 
-    // Reset tournament stats for all players first
-    await supabase.from('players').update({
-      goals: 0, assists: 0, yellow_cards: 0, red_cards: 0
-    }).gte('id', 0)
-    l(`Reset all player stats`)
+    // Budget check: we've used 1 call for fixtures.
+    // Each event fetch = 1 call. Cap at 14 per sync (6 syncs/day × 15 = 90 < 100).
+    const MAX_EVENT_CALLS = 14
+    const toProcess = newlyFinished.slice(0, MAX_EVENT_CALLS)
+    if (newlyFinished.length > MAX_EVENT_CALLS) {
+      l(`  Rate limited: processing ${MAX_EVENT_CALLS} of ${newlyFinished.length} new matches`)
+    }
 
-    // Aggregate events across all finished matches
-    const playerStats: Record<string, { goals: number, assists: number, yellows: number, reds: number, team: string }> = {}
+    // Collect all events from newly finished matches
+    const playerStats: Record<string, {
+      goals: number, assists: number, yellows: number, reds: number, team: string, name: string
+    }> = {}
 
-    for (const f of finishedFixtures) {
+    for (const f of toProcess) {
       const fixtureId = f.fixture.id
+      const homeTeam = mapTeam(f.teams.home.name)
+      const awayTeam = mapTeam(f.teams.away.name)
       try {
         const events = await apiFetch('/fixtures/events', { fixture: String(fixtureId) })
         for (const ev of events) {
@@ -217,20 +218,17 @@ Deno.serve(async (req) => {
 
           const key = `${team}|${playerName.toLowerCase()}`
           if (!playerStats[key]) {
-            playerStats[key] = { goals: 0, assists: 0, yellows: 0, reds: 0, team }
+            playerStats[key] = { goals: 0, assists: 0, yellows: 0, reds: 0, team, name: playerName }
           }
 
           if (ev.type === 'Goal' && ev.detail !== 'Missed Penalty') {
-            if (ev.detail === 'Own Goal') {
-              // OG: don't count as a goal for the player
-            } else {
+            if (ev.detail !== 'Own Goal') {
               playerStats[key].goals++
             }
-            // Check for assist
             if (ev.assist?.name) {
               const assistKey = `${team}|${ev.assist.name.toLowerCase()}`
               if (!playerStats[assistKey]) {
-                playerStats[assistKey] = { goals: 0, assists: 0, yellows: 0, reds: 0, team }
+                playerStats[assistKey] = { goals: 0, assists: 0, yellows: 0, reds: 0, team, name: ev.assist.name }
               }
               playerStats[assistKey].assists++
             }
@@ -239,22 +237,21 @@ Deno.serve(async (req) => {
             else if (ev.detail === 'Red Card' || ev.detail === 'Second Yellow card') playerStats[key].reds++
           }
         }
+        processedFixtures.add(fixtureId)
+        l(`  Fixture ${fixtureId} (${homeTeam} vs ${awayTeam}): ${events.length} events`)
       } catch (e: any) {
-        l(`  Events for fixture ${fixtureId}: ${e.message}`)
+        l(`  Fixture ${fixtureId} events failed: ${e.message}`)
       }
     }
-    l(`Parsed events for ${finishedFixtures.length} matches, ${Object.keys(playerStats).length} players`)
 
-    // ── Step 6: Match events to players in DB and update ──────────────────
+    // ── Step 5: Apply incremental stat updates to players table ───────────
     let statUpdates = 0
     for (const [key, stats] of Object.entries(playerStats)) {
       const team = stats.team
-      const playerName = key.split('|')[1]
-
-      // Try matching by last name + team
-      const nameParts = playerName.split(' ')
+      const nameParts = stats.name.split(' ')
       const lastName = nameParts[nameParts.length - 1]
 
+      // Find matching player(s) by team + last name
       const { data: matches } = await supabase
         .from('players')
         .select('id,name,goals,assists,yellow_cards,red_cards')
@@ -262,10 +259,9 @@ Deno.serve(async (req) => {
         .ilike('name', `%${lastName}%`)
 
       if (matches && matches.length > 0) {
-        // Pick best match - prefer exact last name match
+        // Pick best match
         let best = matches[0]
         if (matches.length > 1) {
-          // Try to find one where first initial also matches
           const firstInitial = nameParts[0]?.[0]?.toLowerCase()
           const better = matches.find((m: any) =>
             m.name.toLowerCase().startsWith(firstInitial || '')
@@ -273,6 +269,7 @@ Deno.serve(async (req) => {
           if (better) best = better
         }
 
+        // Increment stats (don't reset — we only process new matches)
         const updates: Record<string, number> = {}
         if (stats.goals) updates.goals = (best.goals || 0) + stats.goals
         if (stats.assists) updates.assists = (best.assists || 0) + stats.assists
@@ -287,16 +284,25 @@ Deno.serve(async (req) => {
     }
     l(`✓ ${statUpdates} player stat rows updated`)
 
-    l('✓ Sync complete')
+    // ── Step 6: Save sync state ───────────────────────────────────────────
+    const stateValue = { fixture_ids: [...processedFixtures] }
+    await supabase.from('sync_state').upsert({
+      key: 'processed_fixtures',
+      value: stateValue,
+      updated_at: new Date().toISOString(),
+    })
+    l(`✓ Sync state saved (${processedFixtures.size} fixtures tracked)`)
+
+    l(`✓ Sync complete — ${apiCalls} API calls used`)
     return new Response(
-      JSON.stringify({ ok: true, log }),
+      JSON.stringify({ ok: true, log, api_calls: apiCalls }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (err: any) {
     l(`✗ Error: ${err.message}`)
     return new Response(
-      JSON.stringify({ ok: false, log, error: err.message }),
+      JSON.stringify({ ok: false, log, error: err.message, api_calls: apiCalls }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
