@@ -3,7 +3,7 @@ const SB_URL     = 'https://hsanauyxexbyefmefhcd.supabase.co';
 const SB_KEY     = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzYW5hdXl4ZXhieWVmbWVmaGNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2ODA2NjEsImV4cCI6MjA5NzI1NjY2MX0.aJ9sMKG1JPW9Umy5gz2dFdhXhVTWxh3Epemgf1MZVK0';
 const SB_SVC_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzYW5hdXl4ZXhieWVmbWVmaGNkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTY4MDY2MSwiZXhwIjoyMDk3MjU2NjYxfQ.F0PPYAgFDk_EXjJcXfJFK5CXmGLHrCICkrwG9DFihM4';
 const ADMIN      = 'TJ';
-const CONTENDERS = ['Eivind','Mari','Benny','Martin','TJ'];
+const CONTENDERS = ['Eivind','Mari','Benny','Martin','TJ','Helle'];
 const WC_API     = 'https://corsproxy.io/?url=https://worldcup26.ir';
 const BASE_URL   = 'https://cltj.github.io/wc26';
 
@@ -32,6 +32,7 @@ const PLAYER_PHOTOS = {
   'Mari':   `${BASE_URL}/mari.jpeg`,
   'Benny':  `${BASE_URL}/placeholder.jpg`,
   'Martin': `${BASE_URL}/martin.png`,
+  'Helle':  `${BASE_URL}/placeholder.jpg`,
 };
 
 // ── Supabase helpers ─────────────────────────────────────────────────────────
