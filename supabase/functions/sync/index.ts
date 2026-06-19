@@ -6,9 +6,10 @@ const corsHeaders = {
 }
 
 const WC_API = 'https://worldcup26.ir'
+const ESPN_API = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world'
 
 // Map worldcup26.ir team names → Supabase team names
-const TEAM_MAP: Record<string, string> = {
+const WC_TEAM_MAP: Record<string, string> = {
   'United States': 'USA',
   'Turkey': 'Türkiye',
   'Czech Republic': 'Czechia',
@@ -20,8 +21,35 @@ const TEAM_MAP: Record<string, string> = {
   'Korea Republic': 'South Korea',
 }
 
-function mapTeam(name: string): string {
-  return TEAM_MAP[name] || name
+// Map ESPN team names → Supabase team names
+const ESPN_TEAM_MAP: Record<string, string> = {
+  'United States': 'USA',
+  'Türkiye': 'Türkiye',
+  'Turkey': 'Türkiye',
+  'Czechia': 'Czechia',
+  'Czech Republic': 'Czechia',
+  'Bosnia-Herzegovina': 'Bosnia & Herz.',
+  'Bosnia and Herzegovina': 'Bosnia & Herz.',
+  'Ivory Coast': "Côte d'Ivoire",
+  "Côte d'Ivoire": "Côte d'Ivoire",
+  'Iran': 'IR Iran',
+  'IR Iran': 'IR Iran',
+  'Cape Verde': 'Cabo Verde',
+  'Cabo Verde': 'Cabo Verde',
+  'Congo DR': 'DR Congo',
+  'DR Congo': 'DR Congo',
+  'South Korea': 'South Korea',
+  'Korea Republic': 'South Korea',
+  'Curaçao': 'Curaçao',
+  'Curacao': 'Curaçao',
+}
+
+function mapWcTeam(name: string): string {
+  return WC_TEAM_MAP[name] || name
+}
+
+function mapEspnTeam(name: string): string {
+  return ESPN_TEAM_MAP[name] || name
 }
 
 // Normalize for matching: strip diacritics + Scandinavian chars
@@ -35,83 +63,113 @@ function norm(s: string): string {
     .toLowerCase()
 }
 
-// Garbled matchday-2 scorer names → correct Supabase names
-const SCORER_FIXES: Record<string, string> = {
-  'jvhan mnzambi|Switzerland': 'Johan Manzambi',
-  'rvbn vargas|Switzerland': 'Ruben Vargas',
-  'armin mhmich|Bosnia & Herz.': 'Armin Mahmic',
-  'kail larin|Canada': 'Cyle Larin',
-  'rvmanv ashmid|Austria': 'Romano Schmid',
-  'mikhal sadilk|Czechia': 'Michal Sadilek',
-  'dnil mvnvz|Colombia': 'Daniel Munoz',
-  'lviiz diaz|Colombia': 'Luis Diaz',
-  'khamintvn kampaz|Colombia': 'Jhaminton Campaz',
-  'kalb iirnki|Ghana': 'Caleb Yirenkyi',
-  'abas bk fiz allh af|Uzbekistan': 'Abbosbek Fayzullaev',
-  'izn alarb|Austria': 'David Alaba',
-  'ali avlvan|Jordan': 'Ali Olwan',
-  'y.ayari|Sweden': 'Yacine Ayari',
-  'ramin rezaiian|IR Iran': 'Ramin Rezaeian',
-  'leo ostigard|Norway': 'Leo Ostigard',
-  'abdulelah al-amri|Saudi Arabia': 'Abdulelah Ali A Alamri',
-}
-
-// Parse scorer strings from a single game
-function parseScorers(game: any): Array<{ team: string, name: string, og: boolean }> {
-  const result: Array<{ team: string, name: string, og: boolean }> = []
-  for (const [side, teamKey] of [['home_scorers', 'home_team_name_en'], ['away_scorers', 'away_team_name_en']] as const) {
-    const raw = game[side]
-    if (!raw || raw === 'null') continue
-    const matches = raw.match(/[\u201c\u201d"""]([^"\u201c\u201d"""]+)[\u201c\u201d"""]/g) || []
-    const apiTeam = game[teamKey]
-    const apiOpp = teamKey === 'home_team_name_en' ? game.away_team_name_en : game.home_team_name_en
-
-    for (let s of matches) {
-      s = s.replace(/^[\u201c\u201d"""]|[\u201c\u201d"""]$/g, '')
-      const og = s.includes('(OG)')
-      const team = mapTeam(og ? apiOpp : apiTeam)
-      let name = s.replace(/\s*\d+[\u2019'`+].*$/, '').replace(/[\u202b\u200f\u200e]/g, '').trim()
-
-      const fixKey = norm(name) + '|' + team
-      if (SCORER_FIXES[fixKey]) name = SCORER_FIXES[fixKey]
-
-      result.push({ team, name, og })
-    }
-  }
-  return result
-}
-
-// Match a scorer name to a Supabase player
+// Match an ESPN player name to a Supabase player — prefer multi-part matches over single last name
 function matchPlayer(
-  scorerName: string, team: string,
+  espnName: string, team: string,
   teamPlayers: Array<{ id: number, name: string, name_on_shirt: string | null }>
 ): number | null {
-  const sNorm = norm(scorerName)
+  const sNorm = norm(espnName)
   const sParts = sNorm.replace(/[.]/g, '').split(/\s+/).filter(Boolean)
   const sLast = sParts[sParts.length - 1] || ''
+  const sFirst = sParts[0] || ''
 
+  // Pass 1: strong matches (full name containment or multi-part)
   for (const pl of teamPlayers) {
     const pNorm = norm(pl.name)
     const pParts = pNorm.replace(/[.\-]/g, ' ').split(/\s+/).filter(Boolean)
 
-    // Last name match
-    if (sLast.length >= 2 && pParts.some(p => p === sLast)) return pl.id
+    // Exact match
+    if (sNorm === pNorm) return pl.id
     // Full containment
     if (pNorm.includes(sNorm) || sNorm.includes(pNorm)) return pl.id
-    // All significant parts match
+    // All significant parts match (multi-part names)
     if (sParts.length >= 2) {
       const long = sParts.filter(p => p.length > 1)
       if (long.length > 0 && long.every(p => pParts.some(pp => pp === p || pp.startsWith(p)))) return pl.id
     }
-    // Try shirt name
+    // Try shirt name — full match
     if (pl.name_on_shirt) {
       const shNorm = norm(pl.name_on_shirt)
-      const shParts = shNorm.replace(/[.\-]/g, ' ').split(/\s+/).filter(Boolean)
-      if (sLast.length >= 2 && shParts.some(p => p === sLast)) return pl.id
-      if (shNorm.includes(sNorm) || sNorm.includes(shNorm)) return pl.id
+      if (shNorm === sNorm || shNorm.includes(sNorm) || sNorm.includes(shNorm)) return pl.id
     }
   }
+
+  // Pass 2: last-name-only match (weaker, only if first name also partially matches or single-word name)
+  for (const pl of teamPlayers) {
+    const pNorm = norm(pl.name)
+    const pParts = pNorm.replace(/[.\-]/g, ' ').split(/\s+/).filter(Boolean)
+
+    if (sLast.length >= 3 && pParts.some(p => p === sLast)) {
+      // If ESPN name has multiple parts, verify at least first initial matches
+      if (sParts.length >= 2) {
+        if (pParts.some(p => p.startsWith(sFirst.charAt(0)))) return pl.id
+      } else {
+        return pl.id
+      }
+    }
+    // Shirt name last-name match
+    if (pl.name_on_shirt) {
+      const shParts = norm(pl.name_on_shirt).replace(/[.\-]/g, ' ').split(/\s+/).filter(Boolean)
+      if (sLast.length >= 3 && shParts.some(p => p === sLast)) return pl.id
+    }
+  }
+
   return null
+}
+
+// Fetch ESPN scoreboard for a date, return array of {id, home, away, status}
+async function espnScoreboard(dateStr: string): Promise<Array<{id: string, home: string, away: string}>> {
+  const res = await fetch(`${ESPN_API}/scoreboard?dates=${dateStr}`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.events || [])
+    .filter((e: any) => e.status?.type?.name === 'STATUS_FULL_TIME')
+    .map((e: any) => {
+      const comps = e.competitions?.[0] || {}
+      const teams = comps.competitors || []
+      const home = teams.find((t: any) => t.homeAway === 'home')?.team?.displayName || ''
+      const away = teams.find((t: any) => t.homeAway === 'away')?.team?.displayName || ''
+      return { id: e.id, home: mapEspnTeam(home), away: mapEspnTeam(away) }
+    })
+}
+
+// Fetch ESPN match details, return goals/assists/cards
+async function espnMatchStats(eventId: string): Promise<{
+  goals: Array<{ player: string, team: string, og: boolean }>,
+  assists: Array<{ player: string, team: string }>,
+  yellows: Array<{ player: string, team: string }>,
+  reds: Array<{ player: string, team: string }>,
+}> {
+  const result = { goals: [] as any[], assists: [] as any[], yellows: [] as any[], reds: [] as any[] }
+  const res = await fetch(`${ESPN_API}/summary?event=${eventId}`)
+  if (!res.ok) return result
+  const data = await res.json()
+
+  for (const e of (data.keyEvents || [])) {
+    const tt = e.type?.type || ''
+    const participants = e.participants || []
+    const teamName = mapEspnTeam(e.team?.displayName || '')
+    const athlete = participants[0]?.athlete?.displayName || ''
+    if (!athlete) continue
+
+    if (tt.includes('goal')) {
+      const og = tt.includes('own-goal') || (e.text || '').includes('Own Goal')
+      result.goals.push({ player: athlete, team: og ? '' : teamName, og })
+
+      // Assist is the second participant
+      if (participants.length > 1) {
+        const assistName = participants[1]?.athlete?.displayName || ''
+        if (assistName) {
+          result.assists.push({ player: assistName, team: teamName })
+        }
+      }
+    } else if (tt === 'yellow-card') {
+      result.yellows.push({ player: athlete, team: teamName })
+    } else if (tt === 'red-card' || tt === 'yellow-red-card') {
+      result.reds.push({ player: athlete, team: teamName })
+    }
+  }
+  return result
 }
 
 Deno.serve(async (req) => {
@@ -136,11 +194,10 @@ Deno.serve(async (req) => {
       .eq('key', 'processed_games')
       .single()
 
-    // Set of "home_team|away_team" keys for games we've already processed events for
     const processedGames: Set<string> = new Set(stateRow?.value?.game_keys || [])
     l(`Previously processed: ${processedGames.size} games`)
 
-    // ── Step 1: Fetch games from worldcup26.ir ────────────────────────────
+    // ── Step 1: Fetch games from worldcup26.ir (scores & schedule) ──────
     const res = await fetch(`${WC_API}/get/games`)
     if (!res.ok) throw new Error(`worldcup26.ir /get/games: ${res.status}`)
     const gamesData = await res.json()
@@ -148,11 +205,11 @@ Deno.serve(async (req) => {
     const finished = games.filter((g: any) => g.finished === 'TRUE')
     l(`Fetched ${games.length} games, ${finished.length} finished`)
 
-    // ── Step 2: Update schedule table ─────────────────────────────────────
+    // ── Step 2: Update schedule table ───────────────────────────────────
     let schedUpdates = 0
     for (const g of games) {
-      const homeTeam = mapTeam(g.home_team_name_en)
-      const awayTeam = mapTeam(g.away_team_name_en)
+      const homeTeam = mapWcTeam(g.home_team_name_en)
+      const awayTeam = mapWcTeam(g.away_team_name_en)
       const isFt = g.finished === 'TRUE'
 
       const row: Record<string, any> = { status: isFt ? 'FT' : 'scheduled' }
@@ -170,7 +227,6 @@ Deno.serve(async (req) => {
         .single()
 
       if (existing) {
-        // Only update if status changed or scores differ
         if (existing.status !== row.status || isFt) {
           await supabase.from('schedule').update(row).eq('id', existing.id)
           schedUpdates++
@@ -179,15 +235,15 @@ Deno.serve(async (req) => {
     }
     l(`✓ ${schedUpdates} schedule rows updated`)
 
-    // ── Step 3: Update games table (prediction league) ────────────────────
+    // ── Step 3: Update games table (prediction league) ──────────────────
     const { data: predGames } = await supabase.from('games').select('id,home,away,result')
     let gameUpdates = 0
     if (predGames) {
       for (const pg of predGames) {
         const match = finished.find((g: any) => {
-          const h = mapTeam(g.home_team_name_en)
-          const a = mapTeam(g.away_team_name_en)
-          return (h === pg.home || h === mapTeam(pg.home)) && (a === pg.away || a === mapTeam(pg.away))
+          const h = mapWcTeam(g.home_team_name_en)
+          const a = mapWcTeam(g.away_team_name_en)
+          return (h === pg.home || h === mapWcTeam(pg.home)) && (a === pg.away || a === mapWcTeam(pg.away))
         })
         if (!match) continue
         const result = `${match.home_score}-${match.away_score}`
@@ -200,21 +256,21 @@ Deno.serve(async (req) => {
     }
     l(`✓ ${gameUpdates} game results updated`)
 
-    // ── Step 4: Process scorer data for NEW finished games only ───────────
+    // ── Step 4: Find NEW finished games ─────────────────────────────────
     const newFinished = finished.filter((g: any) => {
-      const key = `${mapTeam(g.home_team_name_en)}|${mapTeam(g.away_team_name_en)}`
+      const key = `${mapWcTeam(g.home_team_name_en)}|${mapWcTeam(g.away_team_name_en)}`
       return !processedGames.has(key)
     })
     l(`New finished games to process: ${newFinished.length}`)
 
     if (newFinished.length > 0) {
-      // Load all players for matching (only need id, name, shirt, team)
+      // Load all players for matching
       let allPlayers: any[] = []
       let offset = 0
       while (true) {
         const { data } = await supabase
           .from('players')
-          .select('id,name,name_on_shirt,team_name,goals')
+          .select('id,name,name_on_shirt,team_name,goals,assists,yellow_cards,red_cards')
           .order('team_name')
           .range(offset, offset + 499)
         if (!data || data.length === 0) break
@@ -223,143 +279,138 @@ Deno.serve(async (req) => {
         offset += 500
       }
 
-      // Index players by team
       const playersByTeam: Record<string, typeof allPlayers> = {}
       for (const pl of allPlayers) {
         if (!playersByTeam[pl.team_name]) playersByTeam[pl.team_name] = []
         playersByTeam[pl.team_name].push(pl)
       }
 
-      let goalUpdates = 0
-      let unmatched: string[] = []
+      // ── Step 5: Fetch player stats from ESPN ──────────────────────────
+      // Collect unique match dates from new games to query ESPN scoreboard
+      const matchDates = new Set<string>()
+      for (const g of newFinished) {
+        // worldcup26.ir date format: "MM/DD/YYYY HH:mm" or similar
+        const dateStr = g.local_date || ''
+        const m = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+        if (m) matchDates.add(`${m[3]}${m[1]}${m[2]}`) // YYYYMMDD
+      }
 
-      // Aggregate goals per player across all new games first
-      const goalCounts: Record<number, number> = {}
+      // Build ESPN event lookup: sbTeamKey → espnEventId
+      const espnEvents: Record<string, string> = {}
+      for (const dateStr of matchDates) {
+        const events = await espnScoreboard(dateStr)
+        for (const ev of events) {
+          espnEvents[`${ev.home}|${ev.away}`] = ev.id
+          // Also store reverse in case ESPN swaps home/away
+          espnEvents[`${ev.away}|${ev.home}`] = ev.id
+        }
+      }
+      l(`  Found ${Object.keys(espnEvents).length / 2} ESPN events for ${matchDates.size} dates`)
+
+      // Aggregate stats per player across all new games
+      const statDeltas: Record<number, { goals: number, assists: number, yellows: number, reds: number, name: string }> = {}
+      const addStat = (pid: number, name: string, field: 'goals'|'assists'|'yellows'|'reds') => {
+        if (!statDeltas[pid]) statDeltas[pid] = { goals: 0, assists: 0, yellows: 0, reds: 0, name }
+        statDeltas[pid][field]++
+      }
+
+      let unmatchedPlayers: string[] = []
 
       for (const g of newFinished) {
-        const homeTeam = mapTeam(g.home_team_name_en)
-        const awayTeam = mapTeam(g.away_team_name_en)
-        const scorers = parseScorers(g)
+        const homeTeam = mapWcTeam(g.home_team_name_en)
+        const awayTeam = mapWcTeam(g.away_team_name_en)
+        const gameKey = `${homeTeam}|${awayTeam}`
 
-        for (const s of scorers) {
-          const teamPlayers = playersByTeam[s.team] || []
-          const playerId = matchPlayer(s.name, s.team, teamPlayers)
+        const espnId = espnEvents[gameKey]
+        if (!espnId) {
+          l(`  ⚠ No ESPN event found for ${homeTeam} vs ${awayTeam}`)
+          processedGames.add(gameKey)
+          continue
+        }
 
-          if (playerId) {
-            if (!s.og) {
-              goalCounts[playerId] = (goalCounts[playerId] || 0) + 1
-            }
+        l(`  Processing ${homeTeam} vs ${awayTeam} (ESPN ${espnId})...`)
+        const stats = await espnMatchStats(espnId)
+
+        // Goals
+        for (const goal of stats.goals) {
+          if (goal.og) continue // own goals don't count for the scorer
+          const team = goal.team
+          const teamPlayers = playersByTeam[team] || []
+          const pid = matchPlayer(goal.player, team, teamPlayers)
+          if (pid) {
+            addStat(pid, goal.player, 'goals')
           } else {
-            unmatched.push(`${s.name} (${s.team})`)
+            unmatchedPlayers.push(`${goal.player} (${team}) [goal]`)
           }
         }
 
-        processedGames.add(`${homeTeam}|${awayTeam}`)
-      }
-
-      // Now write aggregated goals to DB in one pass
-      for (const [playerId, addGoals] of Object.entries(goalCounts)) {
-        const player = allPlayers.find(p => p.id === Number(playerId))
-        const newGoals = (player?.goals || 0) + addGoals
-        await supabase.from('players').update({ goals: newGoals }).eq('id', Number(playerId))
-        goalUpdates++
-      }
-
-      l(`✓ ${goalUpdates} player goals incremented`)
-      if (unmatched.length > 0) {
-        l(`  Unmatched scorers: ${unmatched.join(', ')}`)
-      }
-    }
-
-    // ── Step 5: Use Claude web search for cards/assists on new games ──────
-    if (newFinished.length > 0) {
-      const ANTHROPIC_KEY = Deno.env.get('ANTHROPIC_KEY') || ''
-      if (ANTHROPIC_KEY) {
-        try {
-          // Build a focused prompt for just the new matches
-          const matchList = newFinished.map((g: any) =>
-            `${mapTeam(g.home_team_name_en)} ${g.home_score}-${g.away_score} ${mapTeam(g.away_team_name_en)}`
-          ).join('\n')
-
-          const prompt = `For these FIFA World Cup 2026 matches that just finished:\n${matchList}\n\nSearch the web and return a JSON array of players who received yellow cards, red cards, or made assists in these specific matches. Return ONLY valid JSON, no markdown:\n[{"name":"Player Name","team":"Team Name","yellow_cards":1,"red_cards":0,"assists":0}]\nOnly include players with at least one card or assist. Use official team names.`
-
-          l('Calling Claude for cards/assists...')
-          const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': ANTHROPIC_KEY,
-              'anthropic-version': '2023-06-01',
-            },
-            body: JSON.stringify({
-              model: 'claude-sonnet-4-6',
-              max_tokens: 4000,
-              system: 'You are a data assistant. Respond with ONLY valid JSON, no prose or markdown fences.',
-              tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-              messages: [{ role: 'user', content: prompt }]
-            })
-          })
-
-          if (aiRes.ok) {
-            const aiData = await aiRes.json()
-            const text = aiData.content?.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('') || ''
-            const jsonMatch = text.match(/\[[\s\S]*\]/)
-            if (jsonMatch) {
-              const cardData = JSON.parse(jsonMatch[0])
-              let cardUpdates = 0
-
-              // Load all players for matching
-              let allPlayers: any[] = []
-              let offset = 0
-              while (true) {
-                const { data } = await supabase
-                  .from('players')
-                  .select('id,name,name_on_shirt,team_name,assists,yellow_cards,red_cards')
-                  .order('team_name')
-                  .range(offset, offset + 499)
-                if (!data || data.length === 0) break
-                allPlayers = allPlayers.concat(data)
-                if (data.length < 500) break
-                offset += 500
-              }
-
-              const playersByTeam: Record<string, typeof allPlayers> = {}
-              for (const pl of allPlayers) {
-                if (!playersByTeam[pl.team_name]) playersByTeam[pl.team_name] = []
-                playersByTeam[pl.team_name].push(pl)
-              }
-
-              for (const entry of cardData) {
-                const team = mapTeam(entry.team)
-                const teamPlayers = playersByTeam[team] || []
-                const playerId = matchPlayer(entry.name, team, teamPlayers)
-                if (!playerId) continue
-
-                const player = allPlayers.find(p => p.id === playerId)
-                if (!player) continue
-
-                const updates: Record<string, number> = {}
-                if (entry.assists) updates.assists = (player.assists || 0) + entry.assists
-                if (entry.yellow_cards) updates.yellow_cards = (player.yellow_cards || 0) + entry.yellow_cards
-                if (entry.red_cards) updates.red_cards = (player.red_cards || 0) + entry.red_cards
-
-                if (Object.keys(updates).length > 0) {
-                  await supabase.from('players').update(updates).eq('id', playerId)
-                  cardUpdates++
-                }
-              }
-              l(`✓ ${cardUpdates} player card/assist updates from Claude`)
-            }
+        // Assists
+        for (const assist of stats.assists) {
+          const teamPlayers = playersByTeam[assist.team] || []
+          const pid = matchPlayer(assist.player, assist.team, teamPlayers)
+          if (pid) {
+            addStat(pid, assist.player, 'assists')
+          } else {
+            unmatchedPlayers.push(`${assist.player} (${assist.team}) [assist]`)
           }
-        } catch (e: any) {
-          l(`Claude cards/assists failed (non-fatal): ${e.message}`)
         }
-      } else {
-        l('No ANTHROPIC_KEY — skipping cards/assists lookup')
+
+        // Yellow cards
+        for (const yc of stats.yellows) {
+          const teamPlayers = playersByTeam[yc.team] || []
+          const pid = matchPlayer(yc.player, yc.team, teamPlayers)
+          if (pid) {
+            addStat(pid, yc.player, 'yellows')
+          } else {
+            unmatchedPlayers.push(`${yc.player} (${yc.team}) [yellow]`)
+          }
+        }
+
+        // Red cards
+        for (const rc of stats.reds) {
+          const teamPlayers = playersByTeam[rc.team] || []
+          const pid = matchPlayer(rc.player, rc.team, teamPlayers)
+          if (pid) {
+            addStat(pid, rc.player, 'reds')
+          } else {
+            unmatchedPlayers.push(`${rc.player} (${rc.team}) [red]`)
+          }
+        }
+
+        processedGames.add(gameKey)
+      }
+
+      // ── Step 6: Write aggregated stats to DB ──────────────────────────
+      let playerUpdates = 0
+      for (const [pidStr, delta] of Object.entries(statDeltas)) {
+        const pid = Number(pidStr)
+        const player = allPlayers.find(p => p.id === pid)
+        if (!player) continue
+
+        const updates: Record<string, number> = {}
+        if (delta.goals > 0) updates.goals = (player.goals || 0) + delta.goals
+        if (delta.assists > 0) updates.assists = (player.assists || 0) + delta.assists
+        if (delta.yellows > 0) updates.yellow_cards = (player.yellow_cards || 0) + delta.yellows
+        if (delta.reds > 0) updates.red_cards = (player.red_cards || 0) + delta.reds
+
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('players').update(updates).eq('id', pid)
+          playerUpdates++
+        }
+      }
+
+      const totalGoals = Object.values(statDeltas).reduce((s, d) => s + d.goals, 0)
+      const totalAssists = Object.values(statDeltas).reduce((s, d) => s + d.assists, 0)
+      const totalYellows = Object.values(statDeltas).reduce((s, d) => s + d.yellows, 0)
+      const totalReds = Object.values(statDeltas).reduce((s, d) => s + d.reds, 0)
+      l(`✓ ${playerUpdates} players updated (${totalGoals}G ${totalAssists}A ${totalYellows}Y ${totalReds}R)`)
+
+      if (unmatchedPlayers.length > 0) {
+        l(`  Unmatched: ${unmatchedPlayers.join(', ')}`)
       }
     }
 
-    // ── Step 6: Save sync state ───────────────────────────────────────────
+    // ── Step 7: Save sync state ─────────────────────────────────────────
     await supabase.from('sync_state').upsert({
       key: 'processed_games',
       value: { game_keys: [...processedGames] },
