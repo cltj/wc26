@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC 2026 – Bracket</title>
+<link rel="stylesheet" href="shared_styles.css">
+<style>
+.bracket-note { font-size:12px; color:var(--dim); margin-bottom:20px; }
+#bracket-wrap { overflow-x:auto; padding-bottom:16px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-header">
+    <div class="tourn-label">FIFA World Cup 2026</div>
+    <h1>Knockout <span>Bracket</span></h1>
+    <div class="subtitle">Round of 32 · Round of 16 · QF · SF · Final</div>
+  </div>
+
+  <p class="bracket-note">Group stage ends 27 Jun · R32 starts 28 Jun · Final 19 Jul at MetLife Stadium, New York</p>
+  <div id="bracket-wrap"><div id="bracket"></div></div>
+</div>
+
+<script src="shared_constants.js"></script>
+<script src="shared_nav.js"></script>
+<script>
+injectNav('bracket');
+
+const R32 = [
+  ['2nd A','TBD','2nd B','TBD','28 Jun'],
+  ['1st E','TBD','3rd A/B/C/D/F','TBD','28 Jun'],
+  ['1st F','TBD','2nd C','TBD','28 Jun'],
+  ['1st C','TBD','2nd F','TBD','29 Jun'],
+  ['1st I','TBD','3rd C/D/F/G/H','TBD','29 Jun'],
+  ['2nd E','TBD','2nd I','TBD','29 Jun'],
+  ['1st A','TBD','3rd C/E/F/H/I','TBD','30 Jun'],
+  ['1st L','TBD','3rd E/H/I/J/K','TBD','30 Jun'],
+  ['1st D','TBD','3rd B/E/F/I/J','TBD','1 Jul'],
+  ['1st G','TBD','3rd A/E/H/I/J','TBD','1 Jul'],
+  ['2nd K','TBD','2nd L','TBD','2 Jul'],
+  ['1st H','TBD','2nd J','TBD','2 Jul'],
+  ['1st B','TBD','3rd E/F/G/I/J','TBD','2 Jul'],
+  ['1st J','TBD','2nd H','TBD','2 Jul'],
+  ['1st K','TBD','3rd D/E/I/J/L','TBD','2 Jul'],
+  ['2nd D','TBD','2nd G','TBD','2 Jul'],
+];
+
+const ROUNDS = [
+  {name:'Round of 32', dates:'28 Jun–2 Jul'},
+  {name:'Round of 16', dates:'4–8 Jul'},
+  {name:'Quarter-finals', dates:'9–12 Jul'},
+  {name:'Semi-finals', dates:'14–15 Jul'},
+  {name:'Final', dates:'19 Jul'},
+];
+
+function buildBracket() {
+  const wrap = document.getElementById('bracket');
+  const SH=52,GAP=8,CW=148,CG=32,HDRH=44;
+  const matchH=SH*2+GAP*2+8;
+  const svgW=(CW+CG)*5+CG, svgH=16*matchH+HDRH+60;
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('width',svgW); svg.setAttribute('height',svgH);
+  svg.style.cssText='display:block;min-width:'+svgW+'px';
+
+  ROUNDS.forEach((r,ri)=>{
+    const x=CG+ri*(CW+CG);
+    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    Object.entries({x,y:4,width:CW,height:36,rx:6,fill:'#0d5228'}).forEach(([k,v])=>rect.setAttribute(k,v));
+    svg.appendChild(rect);
+    [[r.name,'#f0b429',13,17],[r.dates,'#8a9aa0',9,32]].forEach(([txt,fill,fs,y])=>{
+      const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+      Object.entries({'x':x+CW/2,y,fill,'font-size':fs,'font-family':'Bebas Neue,sans-serif','text-anchor':'middle'}).forEach(([k,v])=>t.setAttribute(k,v));
+      if(fs===9)t.setAttribute('font-family','Inter,sans-serif');
+      t.textContent=txt; svg.appendChild(t);
+    });
+  });
+
+  function drawMatch(x,yC,tl,tt,bl,bt){
+    const y=yC-SH-GAP/2,h=SH*2+GAP;
+    const card=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    Object.entries({x,y,width:CW,height:h,rx:6,fill:'#0e2718',stroke:'rgba(255,255,255,0.07)','stroke-width':1}).forEach(([k,v])=>card.setAttribute(k,v));
+    svg.appendChild(card);
+    const div=document.createElementNS('http://www.w3.org/2000/svg','line');
+    Object.entries({x1:x+6,y1:yC,x2:x+CW-6,y2:yC,stroke:'rgba(255,255,255,0.07)','stroke-width':1}).forEach(([k,v])=>div.setAttribute(k,v));
+    svg.appendChild(div);
+    [[tl,tt,yC-SH/2],[bl,bt,yC+SH/2]].forEach(([lbl,name,my])=>{
+      const l=document.createElementNS('http://www.w3.org/2000/svg','text');
+      Object.entries({x:x+8,y:my-6,fill:'#8a9aa0','font-size':8,'font-family':'Inter,sans-serif'}).forEach(([k,v])=>l.setAttribute(k,v));
+      l.textContent=lbl; svg.appendChild(l);
+      const n=document.createElementNS('http://www.w3.org/2000/svg','text');
+      const isTBD=name==='TBD';
+      Object.entries({x:x+8,y:my+8,fill:isTBD?'#8a9aa0':'#f5f7f2','font-size':isTBD?10:11,'font-weight':isTBD?400:600,'font-family':'Inter,sans-serif'}).forEach(([k,v])=>n.setAttribute(k,v));
+      n.textContent=isTBD?'—':name; svg.appendChild(n);
+    });
+    return {rightX:x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8};
+  }
+
+  function conn(fx,fty,fby,tx,ty){
+    const mx=fx+CG/2;
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',`M${fx} ${fty} H${mx} V${fby} H${mx} V${ty} H${tx}`);
+    p.setAttribute('fill','none'); p.setAttribute('stroke','rgba(255,255,255,0.1)'); p.setAttribute('stroke-width','1.5');
+    svg.appendChild(p);
+  }
+
+  const r32c=R32.map((m,i)=>drawMatch(CG,HDRH+matchH*i+matchH/2,m[0],m[1],m[2],m[3]));
+  const r16x=CG+CW+CG, r16c=[];
+  for(let i=0;i<8;i++){
+    const t=r32c[i*2],b=r32c[i*2+1],yC=(t.centerY+b.centerY)/2;
+    drawMatch(r16x,yC,'W M'+(i*2+73),'TBD','W M'+(i*2+74),'TBD');
+    conn(t.rightX,t.topY,t.centerY,r16x,yC-SH/2+8);
+    conn(b.rightX,b.centerY,b.botY,r16x,yC+SH/2+8);
+    r16c.push({rightX:r16x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
+  }
+  const qfx=r16x+CW+CG, qfc=[];
+  for(let i=0;i<4;i++){
+    const t=r16c[i*2],b=r16c[i*2+1],yC=(t.centerY+b.centerY)/2;
+    drawMatch(qfx,yC,'W R16-'+(i*2+1),'TBD','W R16-'+(i*2+2),'TBD');
+    conn(t.rightX,t.topY,t.centerY,qfx,yC-SH/2+8);
+    conn(b.rightX,b.centerY,b.botY,qfx,yC+SH/2+8);
+    qfc.push({rightX:qfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
+  }
+  const sfx=qfx+CW+CG, sfc=[];
+  for(let i=0;i<2;i++){
+    const t=qfc[i*2],b=qfc[i*2+1],yC=(t.centerY+b.centerY)/2;
+    drawMatch(sfx,yC,'W QF-'+(i*2+1),'TBD','W QF-'+(i*2+2),'TBD');
+    conn(t.rightX,t.topY,t.centerY,sfx,yC-SH/2+8);
+    conn(b.rightX,b.centerY,b.botY,sfx,yC+SH/2+8);
+    sfc.push({rightX:sfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
+  }
+  const finx=sfx+CW+CG, finY=(sfc[0].centerY+sfc[1].centerY)/2;
+  drawMatch(finx,finY,'W SF-1','TBD','W SF-2','TBD');
+  conn(sfc[0].rightX,sfc[0].topY,sfc[0].centerY,finx,finY-SH/2+8);
+  conn(sfc[1].rightX,sfc[1].centerY,sfc[1].botY,finx,finY+SH/2+8);
+  const addTxt=(x,y,txt,fill,fs,fam)=>{
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    Object.entries({x,y,fill,'font-size':fs,'font-family':fam||'Bebas Neue,sans-serif','text-anchor':'middle','letter-spacing':1}).forEach(([k,v])=>t.setAttribute(k,v));
+    t.textContent=txt; svg.appendChild(t);
+  };
+  addTxt(finx+CW/2,finY-SH-GAP-6,'🏆 FINAL · 19 Jul','#f0b429',10);
+  const thirdY=finY+SH*2+GAP*4;
+  drawMatch(finx,thirdY,'L SF-1','TBD','L SF-2','TBD');
+  addTxt(finx+CW/2,thirdY-SH-GAP-6,'🥉 3RD PLACE · 18 Jul','#c07840',10);
+  svg.setAttribute('height',Math.max(thirdY+SH+GAP+20,svgH));
+  wrap.appendChild(svg);
+}
+
+buildBracket();
+</script>
+</body>
+</html>

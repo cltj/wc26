@@ -4,575 +4,169 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WC 2026 – Prediction League</title>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared_styles.css">
 <style>
-  :root {
-    --pitch:   #0a3d1f;
-    --card:    #0e2718;
-    --gold:    #f0b429;
-    --silver:  #b0b8c4;
-    --bronze:  #c07840;
-    --white:   #f5f7f2;
-    --dim:     #8a9aa0;
-    --border:  rgba(255,255,255,0.07);
-    --green:   #60b97a;
-    --red:     #e03434;
-    --norway:  #ef2b2d;
-  }
-  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0 }
-  body { background:var(--pitch); color:var(--white); font-family:'Inter',sans-serif; min-height:100vh }
-  body::before { content:''; position:fixed; inset:0; background-image:repeating-linear-gradient(180deg,transparent 0px,transparent 48px,rgba(255,255,255,0.022) 48px,rgba(255,255,255,0.022) 96px); pointer-events:none; z-index:0 }
-  .page { position:relative; z-index:1; max-width:980px; margin:0 auto; padding:0 20px 80px }
+.lb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 10px; }
+.lb-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0 0 14px; overflow: hidden; position: relative; transition: transform .15s; }
+.lb-card:hover { transform: translateY(-2px); }
+.lb-card.rank-1 { border-color: var(--gold); }
+.lb-card.rank-2 { border-color: var(--silver); }
+.lb-card.rank-3 { border-color: var(--bronze); }
+.lb-photo { width: 100%; aspect-ratio: 3/4; object-fit: cover; object-position: top; display: block; background: #071810; }
+.lb-ribbon { position: absolute; top: 8px; left: 8px; font-family: 'Bebas Neue',sans-serif; font-size: 11px; letter-spacing: .1em; padding: 3px 8px; border-radius: 4px; }
+.rank-1 .lb-ribbon { background: var(--gold); color: #003; }
+.rank-2 .lb-ribbon { background: var(--silver); color: #111; }
+.rank-3 .lb-ribbon { background: var(--bronze); color: #fff; }
+.rank-4 .lb-ribbon, .rank-5 .lb-ribbon { background: rgba(255,255,255,.1); color: var(--dim); }
+.lb-body { padding: 10px 12px 0; }
+.lb-name { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+.lb-pts  { font-family: 'Bebas Neue',sans-serif; font-size: 40px; line-height: 1; margin-bottom: 8px; }
+.rank-1 .lb-pts { color: var(--gold); }
+.lb-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.lb-card.rank-1::after { content: '🏆'; position: absolute; top: 8px; right: 8px; font-size: 16px; opacity: .8; }
 
-  /* ── HEADER ── */
-  header { text-align:center; padding:48px 0 36px; border-bottom:1px solid var(--border); margin-bottom:40px }
-  .tourn-label { font-size:11px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; color:var(--gold); margin-bottom:10px }
-  h1 { font-family:'Bebas Neue',sans-serif; font-size:clamp(48px,8vw,88px); line-height:.92; margin-bottom:6px }
-  h1 span { color:var(--gold) }
-  .subtitle { font-size:13px; color:var(--dim); letter-spacing:.05em }
-
-  /* ── SECTION TITLE ── */
-  .section-title { font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:.08em; color:var(--gold); margin-bottom:16px; display:flex; align-items:center; gap:10px }
-  .section-title::after { content:''; flex:1; height:1px; background:var(--border) }
-  section { margin-bottom:48px }
-
-  /* ── LOGIN MODAL ── */
-  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:100; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px) }
-  .modal-bg.hidden { display:none }
-  .modal { background:#0e2718; border:1px solid var(--gold); border-radius:14px; padding:36px 32px; width:340px; text-align:center }
-  .modal h2 { font-family:'Bebas Neue',sans-serif; font-size:28px; color:var(--gold); margin-bottom:6px }
-  .modal p { font-size:13px; color:var(--dim); margin-bottom:24px }
-  .modal select, .modal input { width:100%; background:#071810; border:1px solid var(--border); color:var(--white); border-radius:8px; padding:11px 14px; font-size:14px; font-family:'Inter',sans-serif; margin-bottom:12px; outline:none }
-  .modal select:focus, .modal input:focus { border-color:var(--gold) }
-  .modal button { width:100%; background:var(--gold); color:#003; border:none; border-radius:8px; padding:12px; font-weight:700; font-size:14px; cursor:pointer; font-family:'Inter',sans-serif }
-  .modal button:hover { background:#e0a820 }
-  .modal-err { color:var(--red); font-size:12px; margin-bottom:10px; min-height:16px }
-
-  /* ── WHO IS LOGGED IN ── */
-  .user-bar { display:flex; align-items:center; justify-content:space-between; background:rgba(240,180,41,.08); border:1px solid rgba(240,180,41,.2); border-radius:8px; padding:10px 16px; margin-bottom:28px; font-size:13px }
-  .user-bar strong { color:var(--gold) }
-  .user-bar button { background:none; border:1px solid var(--border); color:var(--dim); border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer; font-family:'Inter',sans-serif }
-  .user-bar button:hover { border-color:var(--dim); color:var(--white) }
-
-  /* ── LEADERBOARD ── */
-  .lb-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:10px }
-  .lb-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 16px 14px; position:relative; overflow:hidden; transition:transform .15s }
-  .lb-card:hover { transform:translateY(-2px) }
-  .lb-card.rank-1 { border-color:var(--gold); background:linear-gradient(145deg,#1a2e10,#0e2718) }
-  .lb-card.rank-2 { border-color:var(--silver) }
-  .lb-card.rank-3 { border-color:var(--bronze) }
-  .lb-rank { font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:.12em; color:var(--dim); margin-bottom:4px }
-  .lb-card.rank-1 .lb-rank { color:var(--gold) }
-  .lb-card.rank-2 .lb-rank { color:var(--silver) }
-  .lb-card.rank-3 .lb-rank { color:var(--bronze) }
-  .lb-name { font-weight:700; font-size:17px; margin-bottom:10px }
-  .lb-pts { font-family:'Bebas Neue',sans-serif; font-size:44px; line-height:1; margin-bottom:10px }
-  .lb-card.rank-1 .lb-pts { color:var(--gold) }
-  .lb-meta { display:flex; gap:6px; flex-wrap:wrap }
-  .chip { font-size:10px; font-weight:600; padding:3px 7px; border-radius:4px }
-  .chip-exact  { background:rgba(240,180,41,.15); color:var(--gold) }
-  .chip-win    { background:rgba(96,185,122,.15);  color:var(--green) }
-  .chip-wrong  { background:rgba(224,52,52,.10);   color:#e07070 }
-  .chip-played  { background:rgba(255,255,255,.06); color:var(--dim) }
-  .chip-missed  { background:rgba(255,255,255,.04); color:#6a7a80 }
-  .lb-card.rank-1::after { content:'🏆'; position:absolute; top:14px; right:14px; font-size:18px; opacity:.7 }
-  .lb-photo { width:100%; aspect-ratio:3/4; object-fit:cover; object-position:top; border-radius:7px; margin-bottom:12px; display:block; background:#071810 }
-  .lb-photo-wrap { position:relative; }
-  .lb-photo-wrap .rank-ribbon { position:absolute; top:8px; left:8px; font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:.1em; padding:3px 8px; border-radius:4px; color:#fff }
-  .rank-1 .rank-ribbon { background:var(--gold); color:#003 }
-  .rank-2 .rank-ribbon { background:var(--silver); color:#111 }
-  .rank-3 .rank-ribbon { background:var(--bronze); color:#fff }
-  .rank-4 .rank-ribbon, .rank-5 .rank-ribbon { background:rgba(255,255,255,.1); color:var(--dim) }
-
-  /* ── GAMES ── */
-  .games-list { display:flex; flex-direction:column; gap:10px }
-  .game-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden }
-  .game-card.norway-game { border-left:3px solid var(--norway) }
-  .game-header { display:grid; grid-template-columns:32px 1fr auto 1fr auto; align-items:center; gap:8px; padding:13px 16px; cursor:pointer; user-select:none }
-  .game-header:hover { background:rgba(255,255,255,.025) }
-  .gnum { font-family:'Bebas Neue',sans-serif; font-size:17px; color:var(--dim); text-align:center }
-  .gteam { font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-  .gteam.home { text-align:right }
-  .gscore { font-family:'JetBrains Mono',monospace; font-size:17px; min-width:54px; text-align:center; padding:4px 8px; border-radius:6px; background:rgba(255,255,255,.05) }
-  .gscore.done { background:rgba(240,180,41,.12); color:var(--gold) }
-  .gscore.live { background:rgba(96,185,122,.15); color:var(--green); animation:pulse 2s infinite }
-  .gscore.pending { color:var(--dim); font-size:12px }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
-  .gmeta { font-size:10px; color:var(--dim); text-align:right; line-height:1.5 }
-  .lock-badge { font-size:9px; font-weight:700; letter-spacing:.05em; padding:2px 5px; border-radius:3px; background:rgba(224,52,52,.15); color:#e07070 }
-  .open-badge { font-size:9px; font-weight:700; letter-spacing:.05em; padding:2px 5px; border-radius:3px; background:rgba(96,185,122,.15); color:var(--green) }
-  .norway-badge { font-size:10px; font-weight:700; background:rgba(239,43,45,.15); color:#f47c7e; padding:2px 6px; border-radius:4px; margin-left:4px; vertical-align:middle }
-
-  /* ── PREDICTIONS PANEL ── */
-  .pred-panel { display:none; border-top:1px solid var(--border); padding:14px 16px }
-  .pred-panel.open { display:block }
-  .pred-grid { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
-  .pred-cell { flex:1; min-width:90px; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:7px; padding:9px 11px }
-  .pred-cell-name { font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--dim); margin-bottom:5px }
-  .pred-cell-score { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:500 }
-  .pred-cell-score.empty { color:var(--dim); font-size:11px; font-family:'Inter',sans-serif }
-  .pred-badge { display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; margin-top:4px }
-  .pb-3 { background:rgba(240,180,41,.18); color:var(--gold) }
-  .pb-1 { background:rgba(96,185,122,.18); color:var(--green) }
-  .pb-0 { background:rgba(224,52,52,.12); color:#e07070 }
-  .pb-p { background:rgba(255,255,255,.05); color:var(--dim) }
-  .pb-m { background:rgba(255,255,255,.04); color:#6a7a80; font-style:italic }
-
-  /* ── PREDICTION INPUT ── */
-  .pred-input-row { display:flex; gap:8px; align-items:center; padding-top:10px; border-top:1px solid var(--border) }
-  .pred-input-row label { font-size:12px; color:var(--dim); white-space:nowrap }
-  .pred-input-row input { flex:1; background:#071810; border:1px solid var(--border); color:var(--white); border-radius:7px; padding:9px 12px; font-family:'JetBrains Mono',monospace; font-size:14px; outline:none; max-width:120px }
-  .pred-input-row input:focus { border-color:var(--gold) }
-  .pred-input-row input:disabled { opacity:.4; cursor:not-allowed }
-  .pred-input-row button { background:var(--gold); color:#003; border:none; border-radius:7px; padding:9px 18px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; font-family:'Inter',sans-serif }
-  .pred-input-row button:disabled { opacity:.4; cursor:not-allowed }
-  .pred-input-row .locked-msg { font-size:11px; color:#e07070; font-style:italic }
-  .save-msg { font-size:11px; color:var(--green); margin-left:6px; opacity:0; transition:opacity .3s }
-  .save-msg.show { opacity:1 }
-
-  /* ── GROUPS ── */
-  .groups-meta { font-size:11px; color:var(--dim); margin-bottom:14px }
-  .groups-meta a { color:var(--gold); text-decoration:none }
-  .groups-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(295px,1fr)); gap:12px }
-  .group-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden }
-  .group-card.norway { border-color:rgba(239,43,45,.4) }
-  .group-hdr { background:#0d5228; padding:8px 14px; font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:.1em; color:var(--gold) }
-  .group-col-hdr { display:grid; grid-template-columns:1fr 26px 26px 26px 26px 26px 26px 30px; padding:5px 10px; background:rgba(0,0,0,.25); font-size:10px; font-weight:700; letter-spacing:.06em; color:var(--dim) }
-  .group-col-hdr span,.group-row span { text-align:center }
-  .group-col-hdr span:first-child,.group-row span:first-child { text-align:left }
-  .group-row { display:grid; grid-template-columns:1fr 26px 26px 26px 26px 26px 26px 30px; padding:6px 10px; position:relative; border-top:1px solid var(--border); font-size:12px }
-  .group-row.qualify { background:rgba(31,122,76,.18) }
-  .group-row.maybe   { background:rgba(240,180,41,.07) }
-  .qbar { position:absolute; left:0; top:0; bottom:0; width:3px }
-  .qbar-g { background:var(--green) }
-  .qbar-y { background:var(--gold) }
-  .gpts { font-size:13px; font-weight:700; color:var(--gold) }
-  .gpts.zero { color:var(--dim); font-weight:400 }
-
-  /* ── BRACKET ── */
-  #bracket-wrap { overflow-x:auto; padding-bottom:16px }
-
-  /* ── ADMIN ── */
-  .admin-section { background:rgba(240,180,41,.05); border:1px solid rgba(240,180,41,.2); border-radius:10px; padding:20px }
-  .admin-grid { display:flex; flex-direction:column; gap:10px }
-  .admin-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
-  .admin-row select, .admin-row input { background:#071810; border:1px solid var(--border); color:var(--white); border-radius:7px; padding:9px 12px; font-size:13px; font-family:'JetBrains Mono',monospace; outline:none }
-  .admin-row select:focus, .admin-row input:focus { border-color:var(--gold) }
-  .admin-row button { background:var(--gold); color:#003; border:none; border-radius:7px; padding:9px 18px; font-weight:700; font-size:13px; cursor:pointer; font-family:'Inter',sans-serif }
-  .admin-note { font-size:11px; color:var(--dim); margin-top:8px }
-
-  @media(max-width:600px) {
-    .game-header { grid-template-columns:26px 1fr auto 1fr auto; gap:5px; padding:11px 12px }
-    .gteam { font-size:12px }
-    .pred-cell { min-width:75px }
-  }
-
-  /* ── PLAYER SEARCH ── */
-  .player-search-section { margin-top:48px }
-  .player-controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px }
-  .player-search { flex:2; min-width:180px; background:#071810; border:1px solid var(--border); color:var(--white); border-radius:8px; padding:10px 14px; font-size:13px; font-family:'Inter',sans-serif; outline:none }
-  .player-search:focus { border-color:var(--gold) }
-  .player-search::placeholder { color:var(--dim) }
-  .player-select { background:#071810; border:1px solid var(--border); color:var(--white); border-radius:8px; padding:10px 12px; font-size:12px; font-family:'Inter',sans-serif; outline:none; cursor:pointer }
-  .player-select:focus { border-color:var(--gold) }
-  .player-select option { background:#071810 }
-  .player-results-meta { font-size:11px; color:var(--dim); margin-bottom:10px; min-height:16px }
-  .player-table-wrap { overflow-x:auto }
-  .player-table { width:100%; border-collapse:collapse; font-size:12px }
-  .player-table th { background:#0d3320; color:var(--dim); font-weight:700; font-size:10px; letter-spacing:.08em; text-transform:uppercase; padding:8px 10px; text-align:left; white-space:nowrap; cursor:pointer; user-select:none }
-  .player-table th:hover { color:var(--gold) }
-  .player-table th.sorted { color:var(--gold) }
-  .player-table th.sorted::after { content:' ↓'; font-size:9px }
-  .player-table th.sorted.asc::after { content:' ↑' }
-  .player-table td { padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; vertical-align:middle }
-  .player-table tr:hover td { background:rgba(255,255,255,.025) }
-  .player-table tr.norway-row td { border-left:2px solid var(--norway) }
-  .pt-num { font-family:'JetBrains Mono',monospace; color:var(--dim); width:32px }
-  .pt-name { font-weight:600; color:var(--white) }
-  .pt-team { color:var(--dim) }
-  .pt-club { color:var(--dim); max-width:140px; overflow:hidden; text-overflow:ellipsis }
-  .pt-pos { display:inline-block; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; letter-spacing:.05em }
-  .pos-GK { background:rgba(240,180,41,.15); color:var(--gold) }
-  .pos-DF { background:rgba(96,185,122,.15); color:var(--green) }
-  .pos-MF { background:rgba(100,160,240,.15); color:#7ab4f0 }
-  .pos-FW { background:rgba(224,52,52,.15); color:#f07070 }
-  .pt-stat { text-align:center; font-family:'JetBrains Mono',monospace; font-size:12px }
-  .pt-stat.nonzero { color:var(--white); font-weight:600 }
-  .pt-stat.zero { color:rgba(255,255,255,.2) }
-  .squad-loading { color:var(--dim); font-size:13px; padding:20px 0 }
-
+.games-list { display: flex; flex-direction: column; gap: 10px; }
+.game-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.game-card.norway { border-left: 3px solid var(--norway); }
+.game-hdr { display: grid; grid-template-columns: 28px 1fr auto 1fr auto; align-items: center; gap: 8px; padding: 12px 14px; cursor: pointer; user-select: none; }
+.game-hdr:hover { background: rgba(255,255,255,.025); }
+.g-num  { font-family: 'Bebas Neue',sans-serif; font-size: 16px; color: var(--dim); text-align: center; }
+.g-team { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-team.home { text-align: right; }
+.g-score { font-family: 'JetBrains Mono',monospace; font-size: 16px; min-width: 50px; text-align: center; padding: 3px 8px; border-radius: 5px; background: rgba(255,255,255,.05); }
+.g-score.done { background: rgba(240,180,41,.12); color: var(--gold); }
+.g-score.pending { color: var(--dim); font-size: 11px; }
+.g-meta { font-size: 10px; color: var(--dim); text-align: right; line-height: 1.5; }
+.lock-pill { font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 3px; background: rgba(224,52,52,.15); color: #e07070; }
+.open-pill { font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 3px; background: rgba(96,185,122,.15); color: var(--green); }
+.norway-badge { font-size: 9px; font-weight: 700; background: rgba(239,43,45,.15); color: #f47c7e; padding: 2px 5px; border-radius: 3px; margin-left: 3px; vertical-align: middle; }
+.preds-panel { display: none; border-top: 1px solid var(--border); padding: 12px 14px; }
+.preds-panel.open { display: block; }
+.preds-grid { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 12px; }
+.pred-cell { flex: 1; min-width: 88px; background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; }
+.pred-name { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
+.pred-score { font-family: 'JetBrains Mono',monospace; font-size: 14px; font-weight: 500; }
+.pred-score.empty { color: var(--dim); font-size: 11px; font-family: 'Inter',sans-serif; }
+.pred-inp-row { display: flex; gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid var(--border); }
+.pred-inp-row label { font-size: 12px; color: var(--dim); white-space: nowrap; }
+.pred-inp { width: 90px; font-family: 'JetBrains Mono',monospace; }
+.save-msg { font-size: 11px; margin-left: 4px; opacity: 0; transition: opacity .3s; }
+.save-msg.show { opacity: 1; }
+.locked-msg { font-size: 11px; color: #e07070; font-style: italic; }
+.toggle-arrow { font-size: 9px; color: var(--dim); transition: transform .2s; margin-left: 3px; }
+.game-card.open .toggle-arrow { transform: rotate(180deg); }
 </style>
 </head>
 <body>
-
-<!-- LOGIN MODAL -->
-<div class="modal-bg" id="modal-bg">
-  <div class="modal">
-    <div style="font-size:32px;margin-bottom:8px">⚽</div>
-    <h2>Sign In</h2>
-    <p>Pick your name and enter your PIN to submit predictions</p>
-    <select id="login-name">
-      <option value="">Select your name…</option>
-      <option>Eivind</option>
-      <option>Mari</option>
-      <option>Benny</option>
-      <option>Martin</option>
-      <option>TJ</option>
-    </select>
-    <input type="password" id="login-pin" placeholder="PIN" maxlength="10" inputmode="numeric">
-    <div class="modal-err" id="login-err"></div>
-    <button onclick="doLogin()">Sign In</button>
-    <div style="margin-top:14px;font-size:11px;color:var(--dim)">Just want to watch? <a href="#" onclick="closeModal()" style="color:var(--gold)">Browse as guest</a></div>
-  </div>
-</div>
-
 <div class="page">
-
-<header>
-  <div class="tourn-label">FIFA World Cup 2026</div>
-  <h1>Prediction <span>League</span></h1>
-  <div class="subtitle">Eivind · Mari · Benny · Martin · TJ</div>
-</header>
-
-<div id="user-bar-wrap"></div>
-
-<!-- LEADERBOARD -->
-<section>
-  <div class="section-title">Standings</div>
-  <div class="lb-grid" id="lb-grid"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
-</section>
-
-<!-- GAMES -->
-<section>
-  <div class="section-title">Games</div>
-  <div class="games-list" id="games-list"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
-</section>
-
-<!-- GROUP STANDINGS -->
-<section>
-  <div class="section-title">Group Stage</div>
-  <div class="groups-meta">Updated 17 Jun · Source: <a href="https://www.cbssports.com/soccer/news/world-cup-group-standings-table-results/" target="_blank">CBS Sports</a> / <a href="https://www.fifa.com" target="_blank">FIFA</a> · 🟢 qualifies · 🟡 possible 3rd</div>
-  <div class="groups-grid" id="groups-grid"></div>
-</section>
-
-<!-- BRACKET -->
-<section>
-  <div class="section-title">Knockout Bracket</div>
-  <div style="font-size:11px;color:var(--dim);margin-bottom:16px">Group stage ends 27 Jun · Round of 32 starts 28 Jun · Final 19 Jul · MetLife Stadium</div>
-  <div id="bracket-wrap"><div id="bracket"></div></div>
-</section>
-
-<!-- ADMIN -->
-<section id="admin-section" style="display:none">
-  <div class="section-title">Admin — Enter Results</div>
-  <div class="admin-section">
-    <div class="admin-grid">
-      <div class="admin-row">
-        <select id="admin-game-sel"></select>
-        <input type="text" id="admin-result-inp" placeholder="e.g. 2-1" maxlength="6" style="width:100px">
-        <button onclick="saveResult()">Save Result</button>
-        <span id="admin-msg" style="font-size:12px;color:var(--green)"></span>
-      </div>
-      <div class="admin-row" style="margin-top:10px">
-        <button id="sync-btn" onclick="runSync()">Sync from Web</button>
-        <span id="sync-msg" style="font-size:12px;color:var(--dim)"></span>
-      </div>
-    </div>
-    <div class="admin-note">⚠️ Only TJ can save results. "Sync from Web" fetches live results via AI web search.</div>
+  <div class="page-header">
+    <div class="tourn-label">FIFA World Cup 2026</div>
+    <h1>Prediction <span>League</span></h1>
+    <div class="subtitle">Eivind · Mari · Benny · Martin · TJ</div>
   </div>
-</section>
 
-
-  <!-- PLAYER SEARCH -->
-  <section class="player-search-section">
-    <div class="section-title">Players</div>
-    <div class="player-controls">
-      <input type="text" class="player-search" id="player-search" placeholder="🔍  Search player name…" oninput="renderPlayers()">
-      <select class="player-select" id="filter-group" onchange="onGroupChange()">
-        <option value="">All groups</option>
-      </select>
-      <select class="player-select" id="filter-team" onchange="renderPlayers()">
-        <option value="">All teams</option>
-      </select>
-      <select class="player-select" id="filter-pos" onchange="renderPlayers()">
-        <option value="">All positions</option>
-        <option value="GK">GK – Goalkeepers</option>
-        <option value="DF">DF – Defenders</option>
-        <option value="MF">MF – Midfielders</option>
-        <option value="FW">FW – Forwards</option>
-      </select>
-    </div>
-    <div id="squad-status" class="squad-loading">Loading players…</div>
-    <div class="player-results-meta" id="player-meta"></div>
-    <div class="player-table-wrap">
-      <table class="player-table" id="player-table">
-        <thead>
-          <tr>
-            <th class="pt-num" onclick="sortBy('shirt_number')">#</th>
-            <th onclick="sortBy('name')">Player</th>
-            <th onclick="sortBy('position')">Pos</th>
-            <th onclick="sortBy('team_name')">Team</th>
-            <th onclick="sortBy('club')">Club</th>
-            <th onclick="sortBy('goals')" title="Goals">⚽</th>
-            <th onclick="sortBy('assists')" title="Assists">🎯</th>
-            <th onclick="sortBy('yellow_cards')" title="Yellow cards">🟨</th>
-            <th onclick="sortBy('red_cards')" title="Red cards">🟥</th>
-          </tr>
-        </thead>
-        <tbody id="player-tbody"></tbody>
-      </table>
-    </div>
+  <section style="margin-bottom:40px">
+    <div class="section-title">Standings</div>
+    <div class="lb-grid" id="lb-grid"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
   </section>
 
+  <section>
+    <div class="section-title">Games</div>
+    <div class="games-list" id="games-list"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
+  </section>
 </div>
 
+<script src="shared_constants.js"></script>
+<script src="shared_nav.js"></script>
 <script>
-// ── CONFIG ───────────────────────────────────────────────────────────────────
-const SB_URL = 'https://hsanauyxexbyefmefhcd.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzYW5hdXl4ZXhieWVmbWVmaGNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2ODA2NjEsImV4cCI6MjA5NzI1NjY2MX0.aJ9sMKG1JPW9Umy5gz2dFdhXhVTWxh3Epemgf1MZVK0';
-const ADMIN  = 'TJ';
-const CONTENDERS = ['Eivind','Mari','Benny','Martin','TJ'];
-const NORWAY_LC  = ['norway','iraq']; // games involving norway
+injectNav('index');
+const rankLabel = ['🥇 1st','🥈 2nd','🥉 3rd','4th','5th'];
+const rankClass = ['rank-1','rank-2','rank-3','rank-4','rank-5'];
+let allGames = [], allPredictions = [];
 
-// ── STATE ────────────────────────────────────────────────────────────────────
-let currentUser = localStorage.getItem('wc_user') || null;
-let allGames = [], allPredictions = [], allParticipants = [];
-
-// ── SUPABASE FETCH ────────────────────────────────────────────────────────────
-async function sb(path, opts={}) {
-  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
-    headers: {
-      'apikey': SB_KEY,
-      'Authorization': `Bearer ${SB_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation',
-      ...opts.headers
-    },
-    ...opts
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const txt = await res.text();
-  return txt ? JSON.parse(txt) : null;
+async function load() {
+  [allGames, allPredictions] = await Promise.all([
+    sb('games?select=*&order=id'),
+    sb('predictions?select=*')
+  ]);
+  renderLB(); renderGames();
 }
 
-// ── SCORING ──────────────────────────────────────────────────────────────────
-function isValidScore(s) {
-  // Must be X-Y format where both parts are non-negative integers
-  if (!s) return false;
-  const parts = s.trim().split('-');
-  if (parts.length !== 2) return false;
-  const [a, b] = parts.map(Number);
-  return !isNaN(a) && !isNaN(b) && Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b >= 0;
-}
-
-function calcPts(result, pred) {
-  // No result yet — pending
-  if (!result) return null;
-  // No prediction or invalid format (pass/blank/etc) — missed, scores null (excluded)
-  if (!pred || !isValidScore(pred)) return null;
-  // Exact score
-  if (result.trim() === pred.trim()) return 3;
-  try {
-    const [rh,ra] = result.trim().split('-').map(Number);
-    const [ph,pa] = pred.trim().split('-').map(Number);
-    const sign = x => x>0?1:x<0?-1:0;
-    if (sign(rh-ra) === sign(ph-pa)) return 1;
-  } catch(e) {}
-  return 0;
-}
-
-// Separate function to classify a prediction entry
-function predStatus(result, pred) {
-  if (!result) return 'pending';          // game not played yet
-  if (!pred || !isValidScore(pred)) return 'missed';  // no valid tip
-  const pts = calcPts(result, pred);
-  return pts === 3 ? 'exact' : pts === 1 ? 'winner' : 'wrong';
-}
-
-function buildLeaderboard(games, predictions) {
-  const totals = {};
-  CONTENDERS.forEach(n => totals[n] = {pts:0,exact:0,winner:0,wrong:0,missed:0,played:0});
-  games.forEach(g => {
-    if (!g.result) return;
-    CONTENDERS.forEach(n => {
-      const p = predictions.find(p => p.game_id===g.id && p.participant===n);
-      const status = predStatus(g.result, p?.prediction);
-      if (status === 'missed') {
-        totals[n].missed++;  // count but don't add points
-      } else if (status !== 'pending') {
-        const pts = calcPts(g.result, p?.prediction);
-        totals[n].pts += pts;
-        totals[n].played++;
-        if (status==='exact') totals[n].exact++;
-        else if (status==='winner') totals[n].winner++;
-        else totals[n].wrong++;
-      }
-    });
-  });
-  return Object.entries(totals).sort((a,b) => b[1].pts - a[1].pts);
-}
-
-// ── LOGIN ────────────────────────────────────────────────────────────────────
-async function doLogin() {
-  const name = document.getElementById('login-name').value;
-  const pin  = document.getElementById('login-pin').value;
-  const err  = document.getElementById('login-err');
-  if (!name) { err.textContent = 'Please select your name.'; return; }
-  if (!pin)  { err.textContent = 'Please enter your PIN.'; return; }
-  try {
-    const rows = await sb(`participants?name=eq.${encodeURIComponent(name)}&pin=eq.${encodeURIComponent(pin)}&select=name`);
-    if (!rows || rows.length === 0) { err.textContent = 'Wrong PIN — try again.'; return; }
-    currentUser = name;
-    localStorage.setItem('wc_user', name);
-    closeModal();
-    renderUserBar();
-    renderGames();
-  } catch(e) { err.textContent = 'Error checking PIN. Try again.'; }
-}
-
-function closeModal() {
-  document.getElementById('modal-bg').classList.add('hidden');
-}
-
-function logout() {
-  currentUser = null;
-  localStorage.removeItem('wc_user');
-  document.getElementById('user-bar-wrap').innerHTML = '';
-  document.getElementById('admin-section').style.display = 'none';
-  renderGames();
-}
-
-function renderUserBar() {
-  if (!currentUser) return;
-  document.getElementById('user-bar-wrap').innerHTML = `
-    <div class="user-bar">
-      <span>Signed in as <strong>${currentUser}</strong> — you can now submit predictions</span>
-      <button onclick="logout()">Sign out</button>
-    </div>`;
-  if (currentUser === ADMIN) {
-    document.getElementById('admin-section').style.display = 'block';
-    populateAdminSelect();
-  }
-}
-
-// Auto-close modal if already logged in
-if (currentUser) closeModal();
-
-// ── LOAD DATA ─────────────────────────────────────────────────────────────────
-async function loadAll() {
-  try {
-    [allGames, allPredictions] = await Promise.all([
-      sb('games?select=*&order=id'),
-      sb('predictions?select=*')
-    ]);
-    renderLeaderboard();
-    renderGames();
-    if (currentUser) renderUserBar();
-  } catch(e) {
-    console.error('Load error', e);
-  }
-}
-
-// ── LEADERBOARD ───────────────────────────────────────────────────────────────
-const PLAYER_PHOTOS = {"Eivind": "https://cltj.github.io/wc26/eivind.jpeg", "TJ": "https://cltj.github.io/wc26/tj.jpg", "Mari": "https://cltj.github.io/wc26/mari.jpeg", "Benny": "https://cltj.github.io/wc26/placeholder.jpg", "Martin": "https://cltj.github.io/wc26/martin.png"};
-
-function renderLeaderboard() {
-  const grid = document.getElementById('lb-grid');
+function renderLB() {
   const lb = buildLeaderboard(allGames, allPredictions);
-  const rankLabel = ['🥇 1st','🥈 2nd','🥉 3rd','4th','5th'];
-  const rankClass = ['rank-1','rank-2','rank-3','rank-4','rank-5'];
-  grid.innerHTML = lb.map(([name, s], i) => {
-    const photo = PLAYER_PHOTOS[name];
-    return `<div class="lb-card ${rankClass[i]||''}">
-      <div class="lb-photo-wrap">
-        <img class="lb-photo" src="${photo}" alt="${name} football card" loading="lazy" onerror="this.src='https://cltj.github.io/wc26/placeholder.jpg'">
-        <span class="rank-ribbon">${rankLabel[i]||''}</span>
+  document.getElementById('lb-grid').innerHTML = lb.map(([name, s], i) => `
+    <div class="lb-card ${rankClass[i]||''}">
+      <div style="position:relative">
+        <img class="lb-photo" src="${PLAYER_PHOTOS[name]}" alt="${name}" loading="lazy"
+          onerror="this.src='${BASE_URL}/placeholder.jpg'">
+        <span class="lb-ribbon">${rankLabel[i]||''}</span>
       </div>
-      <div class="lb-name">${name}</div>
-      <div class="lb-pts">${s.pts}</div>
-      <div class="lb-meta">
-        ${s.exact  ? `<span class="chip chip-exact">${s.exact}× exact</span>` : ''}
-        ${s.winner ? `<span class="chip chip-win">${s.winner}× winner</span>` : ''}
-        ${s.wrong  ? `<span class="chip chip-wrong">${s.wrong}× miss</span>` : ''}
-        ${s.missed ? `<span class="chip chip-missed">${s.missed}× skipped</span>` : ''}
-        <span class="chip chip-played">${s.played} played</span>
+      <div class="lb-body">
+        <div class="lb-name">${name}</div>
+        <div class="lb-pts">${s.pts}</div>
+        <div class="lb-chips">
+          ${s.exact  ? `<span class="chip chip-exact">${s.exact}× exact</span>`  : ''}
+          ${s.winner ? `<span class="chip chip-win">${s.winner}× winner</span>`  : ''}
+          ${s.wrong  ? `<span class="chip chip-wrong">${s.wrong}× miss</span>`   : ''}
+          ${s.missed ? `<span class="chip chip-missed">${s.missed}× skipped</span>` : ''}
+          <span class="chip chip-played">${s.played} played</span>
+        </div>
       </div>
-    </div>`;
-  }).join('');
-}
-
-// ── GAMES ─────────────────────────────────────────────────────────────────────
-function isNorwayGame(g) {
-  return [g.home, g.away].some(t => NORWAY_LC.includes(t.toLowerCase()));
-}
-
-function isLocked(g) {
-  return new Date() >= new Date(g.kickoff);
+    </div>`).join('');
 }
 
 function badgeHtml(result, pred) {
-  const status = predStatus(result, pred);
-  if (status==='pending') return '';
-  if (status==='missed')  return `<span class="pred-badge pb-m">— missed</span>`;
-  if (status==='exact')   return `<span class="pred-badge pb-3">⚽ 3 pts</span>`;
-  if (status==='winner')  return `<span class="pred-badge pb-1">✓ 1 pt</span>`;
-  return `<span class="pred-badge pb-0">✗ 0 pts</span>`;
+  const st = predStatus(result, pred);
+  if (st==='pending') return '';
+  if (st==='missed')  return `<span class="badge badge-m">— missed</span>`;
+  if (st==='exact')   return `<span class="badge badge-3">⚽ 3 pts</span>`;
+  if (st==='winner')  return `<span class="badge badge-1">✓ 1 pt</span>`;
+  return `<span class="badge badge-0">✗ 0 pts</span>`;
 }
 
 function renderGames() {
-  const list = document.getElementById('games-list');
-  list.innerHTML = allGames.map(g => {
-    const locked = isLocked(g);
-    const norway = isNorwayGame(g);
+  const user = getUser();
+  document.getElementById('games-list').innerHTML = allGames.map(g => {
+    const locked = new Date() >= new Date(g.kickoff);
+    const norway = [g.home,g.away].some(t => t.toLowerCase()==='norway' || t.toLowerCase()==='iraq');
     const kickoff = new Date(g.kickoff);
     const dateStr = kickoff.toLocaleDateString('no-NO',{day:'numeric',month:'short'});
     const timeStr = kickoff.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'});
+    const homeL = g.home + (g.home.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
+    const awayL = g.away + (g.away.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
 
     const predsHtml = CONTENDERS.map(name => {
       const p = allPredictions.find(p => p.game_id===g.id && p.participant===name);
-      const pts = calcPts(g.result, p?.prediction);
       return `<div class="pred-cell">
-        <div class="pred-cell-name">${name}</div>
-        ${p?.prediction
-          ? `<div class="pred-cell-score">${p.prediction}</div>`
-          : `<div class="pred-cell-score empty">—</div>`}
-        ${g.result ? badgeHtml(g.result, p?.prediction) : (p && isValidScore(p.prediction) ? `<span class="pred-badge pb-p">Tipped ✓</span>` : '')}
+        <div class="pred-name">${name}</div>
+        <div class="pred-score ${p?.prediction?'':'empty'}">${p?.prediction||'—'}</div>
+        ${g.result ? badgeHtml(g.result, p?.prediction) : (p&&isValidScore(p.prediction)?'<span class="badge badge-t">Tipped ✓</span>':'')}
       </div>`;
     }).join('');
 
-    // Input row for current user
     let inputHtml = '';
-    if (currentUser) {
-      const myPred = allPredictions.find(p => p.game_id===g.id && p.participant===currentUser);
-      if (locked) {
-        inputHtml = `<div class="pred-input-row"><span class="locked-msg">🔒 Predictions locked — game has started</span></div>`;
-      } else {
-        inputHtml = `<div class="pred-input-row">
-          <label>Your tip:</label>
-          <input type="text" id="inp-${g.id}" placeholder="e.g. 2-1" maxlength="6"
-            value="${myPred?.prediction||''}" style="font-size:14px">
-          <button onclick="savePrediction(${g.id})">Save</button>
-          <span class="save-msg" id="msg-${g.id}">Saved ✓</span>
-        </div>`;
-      }
+    if (user) {
+      const myP = allPredictions.find(p => p.game_id===g.id && p.participant===user);
+      inputHtml = locked
+        ? `<div class="pred-inp-row"><span class="locked-msg">🔒 Locked — game has started</span></div>`
+        : `<div class="pred-inp-row">
+            <label>Your tip:</label>
+            <input class="inp pred-inp" id="inp-${g.id}" placeholder="e.g. 2-1" maxlength="6" value="${myP?.prediction||''}">
+            <button class="btn btn-gold" style="padding:7px 14px;font-size:12px" onclick="savePred(${g.id})">Save</button>
+            <span class="save-msg" id="msg-${g.id}" style="color:var(--green)">Saved ✓</span>
+          </div>`;
     }
 
-    const homeLabel = g.home + (g.home.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
-    const awayLabel = g.away + (g.away.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
-
-    return `<div class="game-card${norway?' norway-game':''}">
-      <div class="game-header" onclick="toggleGame(${g.id})">
-        <div class="gnum">${g.id}</div>
-        <div class="gteam home">${homeLabel}</div>
-        <div class="gscore ${g.result?'done':'pending'}">${g.result||'vs'}</div>
-        <div class="gteam">${awayLabel}</div>
-        <div class="gmeta">
-          ${dateStr} ${timeStr}<br>
-          ${locked ? '<span class="lock-badge">LOCKED</span>' : '<span class="open-badge">OPEN</span>'}
-        </div>
+    return `<div class="game-card${norway?' norway':''}" id="gc-${g.id}">
+      <div class="game-hdr" onclick="toggleGame(${g.id})">
+        <div class="g-num">${g.id}</div>
+        <div class="g-team home">${homeL}</div>
+        <div class="g-score ${g.result?'done':'pending'}">${g.result||'vs'}</div>
+        <div class="g-team">${awayL}</div>
+        <div class="g-meta">${dateStr} ${timeStr}<br>${locked?'<span class="lock-pill">LOCKED</span>':'<span class="open-pill">OPEN</span>'} <span class="toggle-arrow">▼</span></div>
       </div>
-      <div class="pred-panel" id="panel-${g.id}">
-        <div class="pred-grid">${predsHtml}</div>
+      <div class="preds-panel" id="pp-${g.id}">
+        <div class="preds-grid">${predsHtml}</div>
         ${inputHtml}
       </div>
     </div>`;
@@ -580,464 +174,36 @@ function renderGames() {
 }
 
 function toggleGame(id) {
-  const panel = document.getElementById(`panel-${id}`);
-  panel.classList.toggle('open');
+  document.getElementById(`pp-${id}`)?.classList.toggle('open');
+  document.getElementById(`gc-${id}`)?.classList.toggle('open');
 }
 
-// ── SAVE PREDICTION ────────────────────────────────────────────────────────────
-async function savePrediction(gameId) {
-  if (!currentUser) return;
+async function savePred(gameId) {
   const inp = document.getElementById(`inp-${gameId}`);
   const msg = document.getElementById(`msg-${gameId}`);
   const pred = inp.value.trim();
-  if (!pred) return;
-
+  const user = getUser();
+  if (!pred || !user) return;
   inp.disabled = true;
-  msg.textContent = 'Saved \u2713';
-  msg.style.color = 'var(--green)';
-
   try {
-    const existing = allPredictions.find(p => p.game_id===gameId && p.participant===currentUser);
-
+    const existing = allPredictions.find(p => p.game_id===gameId && p.participant===user);
     if (existing) {
-      await sb(`predictions?game_id=eq.${gameId}&participant=eq.${encodeURIComponent(currentUser)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ prediction: pred })
-      });
+      await sb(`predictions?game_id=eq.${gameId}&participant=eq.${encodeURIComponent(user)}`, { method:'PATCH', body: JSON.stringify({prediction:pred}) });
       existing.prediction = pred;
     } else {
-      await sb('predictions', {
-        method: 'POST',
-        body: JSON.stringify({ game_id: gameId, participant: currentUser, prediction: pred })
-      });
-      allPredictions.push({ game_id: gameId, participant: currentUser, prediction: pred });
+      await sb('predictions', { method:'POST', body: JSON.stringify({game_id:gameId, participant:user, prediction:pred}) });
+      allPredictions.push({game_id:gameId, participant:user, prediction:pred});
     }
-
     msg.classList.add('show');
     setTimeout(() => msg.classList.remove('show'), 2500);
-    renderLeaderboard();
-    renderGames();
-    setTimeout(() => {
-      const panel = document.getElementById(`panel-${gameId}`);
-      if (panel) panel.classList.add('open');
-    }, 50);
+    renderLB(); renderGames();
+    setTimeout(() => { document.getElementById(`pp-${gameId}`)?.classList.add('open'); document.getElementById(`gc-${gameId}`)?.classList.add('open'); }, 50);
   } catch(e) {
-    console.error('Save error:', e);
-    msg.textContent = 'Error: ' + e.message;
-    msg.style.color = 'var(--red)';
-    msg.classList.add('show');
-  } finally {
-    inp.disabled = false;
-  }
+    msg.textContent = 'Error'; msg.style.color='var(--red)'; msg.classList.add('show');
+  } finally { inp.disabled = false; }
 }
 
-// ── ADMIN — SAVE RESULT ───────────────────────────────────────────────────────
-function populateAdminSelect() {
-  const sel = document.getElementById('admin-game-sel');
-  sel.innerHTML = allGames.map(g =>
-    `<option value="${g.id}">#${g.id} ${g.home} vs ${g.away}${g.result?' ('+g.result+')':''}</option>`
-  ).join('');
-}
-
-async function saveResult() {
-  if (currentUser !== ADMIN) return;
-  const gameId = parseInt(document.getElementById('admin-game-sel').value);
-  const result = document.getElementById('admin-result-inp').value.trim();
-  const msg    = document.getElementById('admin-msg');
-  if (!result) return;
-
-  try {
-    await sb(`games?id=eq.${gameId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ result })
-    });
-    const g = allGames.find(g => g.id===gameId);
-    if (g) g.result = result;
-    msg.textContent = 'Saved ✓';
-    setTimeout(() => msg.textContent = '', 2500);
-    populateAdminSelect();
-    renderLeaderboard();
-    renderGames();
-  } catch(e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.style.color = 'var(--red)';
-  }
-}
-
-// ── ADMIN — SYNC FROM WEB ─────────────────────────────────────────────────────
-async function runSync() {
-  if (currentUser !== ADMIN) return;
-  const btn = document.getElementById('sync-btn');
-  const msg = document.getElementById('sync-msg');
-  btn.disabled = true;
-  btn.textContent = 'Syncing…';
-  msg.textContent = '';
-  msg.style.color = 'var(--dim)';
-
-  try {
-    const res = await fetch(`${SB_URL}/functions/v1/sync`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SB_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Sync failed');
-
-    msg.style.color = 'var(--green)';
-    msg.textContent = (data.log || []).filter(l => l.startsWith('✓')).join(' · ') || 'Sync complete ✓';
-
-    // Update group standings from sync response
-    if (data.groups) {
-      for (const [letter, teams] of Object.entries(data.groups)) {
-        GROUPS[letter] = teams.map(t => [t.name, t.pld, t.w, t.d, t.l, t.gf, t.ga, t.pts]);
-      }
-      renderGroups();
-    }
-
-    // Reload everything to reflect updated data
-    await loadAll();
-    await loadSquads();
-  } catch (e) {
-    msg.style.color = 'var(--red)';
-    msg.textContent = 'Error: ' + e.message;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Sync from Web';
-  }
-}
-
-// ── GROUP STANDINGS ────────────────────────────────────────────────────────────
-let GROUPS = {
-  A:[['Mexico',1,1,0,0,2,0,3],['South Korea',1,1,0,0,2,1,3],['Czechia',1,0,0,1,1,2,0],['South Africa',1,0,0,1,0,2,0]],
-  B:[['Canada',1,0,1,0,1,1,1],['Bosnia & Herz.',1,0,1,0,1,1,1],['Qatar',1,0,1,0,1,1,1],['Switzerland',1,0,1,0,1,1,1]],
-  C:[['Scotland',1,1,0,0,1,0,3],['Brazil',1,0,1,0,1,1,1],['Morocco',1,0,1,0,1,1,1],['Haiti',1,0,0,1,0,1,0]],
-  D:[['Australia',1,1,0,0,2,0,3],['USA',1,1,0,0,4,1,3],['Paraguay',1,0,0,1,1,4,0],['Türkiye',1,0,0,1,0,2,0]],
-  E:[['Germany',1,1,0,0,7,1,3],["Côte d'Ivoire",1,1,0,0,1,0,3],['Curaçao',1,0,0,1,1,7,0],['Ecuador',1,0,0,1,0,1,0]],
-  F:[['Sweden',1,1,0,0,5,1,3],['Netherlands',1,0,1,0,2,2,1],['Japan',1,0,1,0,2,2,1],['Tunisia',1,0,0,1,1,5,0]],
-  G:[['IR Iran',1,0,1,0,2,2,1],['Belgium',1,0,1,0,1,1,1],['Egypt',1,0,1,0,1,1,1],['New Zealand',1,0,1,0,2,2,1]],
-  H:[['Spain',1,0,1,0,0,0,1],['Saudi Arabia',1,0,1,0,1,1,1],['Cabo Verde',1,0,1,0,0,0,1],['Uruguay',1,0,1,0,1,1,1]],
-  I:[['France',1,1,0,0,3,1,3],['Norway',1,1,0,0,4,1,3],['Senegal',1,0,0,1,1,3,0],['Iraq',1,0,0,1,1,4,0]],
-  J:[['Argentina',1,1,0,0,3,0,3],['Austria',1,1,0,0,3,1,3],['Jordan',1,0,0,1,1,3,0],['Algeria',1,0,0,1,0,3,0]],
-  K:[['Colombia',1,1,0,0,3,1,3],['Portugal',1,0,1,0,1,1,1],['DR Congo',1,0,1,0,1,1,1],['Uzbekistan',1,0,0,1,1,3,0]],
-  L:[['England',1,1,0,0,4,2,3],['Ghana',1,1,0,0,1,0,3],['Croatia',1,0,0,1,2,4,0],['Panama',1,0,0,1,0,1,0]]
-};
-
-function renderGroups() {
-  const grid = document.getElementById('groups-grid');
-  grid.innerHTML = Object.entries(GROUPS).map(([letter, teams]) => {
-    const sorted = [...teams].sort((a,b) => b[7]-a[7]||(b[5]-b[6])-(a[5]-a[6])||b[5]-a[5]);
-    const isNorway = sorted.some(t => t[0].toLowerCase()==='norway');
-    return `<div class="group-card${isNorway?' norway':''}">
-      <div class="group-hdr">Group ${letter}${isNorway?' 🇳🇴':''}</div>
-      <div class="group-col-hdr"><span style="padding-left:10px">Team</span><span>P</span><span>W</span><span>D</span><span>L</span><span>GF</span><span>GA</span><span>Pts</span></div>
-      ${sorted.map(([name,pld,w,d,l,gf,ga,pts],i) => {
-        const isNor = name.toLowerCase()==='norway';
-        let cls='group-row', bar='';
-        if (i<2&&pld>0){cls+=' qualify';bar='<span class="qbar qbar-g"></span>';}
-        else if (i===2&&pld>0){cls+=' maybe';bar='<span class="qbar qbar-y"></span>';}
-        return `<div class="${cls}">${bar}
-          <span style="padding-left:10px;font-weight:${isNor?700:400}">${name}${isNor?' 🇳🇴':''}</span>
-          <span style="color:var(--dim)">${pld}</span><span style="color:var(--dim)">${w}</span>
-          <span style="color:var(--dim)">${d}</span><span style="color:var(--dim)">${l}</span>
-          <span style="color:var(--dim)">${gf}</span><span style="color:var(--dim)">${ga}</span>
-          <span class="gpts${pts===0?' zero':''}">${pts}</span></div>`;
-      }).join('')}
-    </div>`;
-  }).join('');
-}
-
-// ── BRACKET ───────────────────────────────────────────────────────────────────
-const R32 = [
-  ['2nd A','TBD','2nd B','TBD','28 Jun'],['1st E','TBD','3rd A/B/C/D/F','TBD','28 Jun'],
-  ['1st F','TBD','2nd C','TBD','28 Jun'],['1st C','TBD','2nd F','TBD','29 Jun'],
-  ['1st I','TBD','3rd C/D/F/G/H','TBD','29 Jun'],['2nd E','TBD','2nd I','TBD','29 Jun'],
-  ['1st A','TBD','3rd C/E/F/H/I','TBD','30 Jun'],['1st L','TBD','3rd E/H/I/J/K','TBD','30 Jun'],
-  ['1st D','TBD','3rd B/E/F/I/J','TBD','1 Jul'],['1st G','TBD','3rd A/E/H/I/J','TBD','1 Jul'],
-  ['2nd K','TBD','2nd L','TBD','2 Jul'],['1st H','TBD','2nd J','TBD','2 Jul'],
-  ['1st B','TBD','3rd E/F/G/I/J','TBD','2 Jul'],['1st J','TBD','2nd H','TBD','2 Jul'],
-  ['1st K','TBD','3rd D/E/I/J/L','TBD','2 Jul'],['2nd D','TBD','2nd G','TBD','2 Jul'],
-];
-const ROUNDS=[
-  {name:'Round of 32',dates:'28 Jun–2 Jul'},{name:'Round of 16',dates:'4–8 Jul'},
-  {name:'Quarter-finals',dates:'9–12 Jul'},{name:'Semi-finals',dates:'14–15 Jul'},
-  {name:'Final',dates:'19 Jul'}
-];
-function buildBracket(){
-  const wrap=document.getElementById('bracket');
-  const SH=52,GAP=8,CW=148,CG=32,HDRH=44;
-  const matchH=SH*2+GAP*2+8;
-  const totalH=16*matchH;
-  const svgW=(CW+CG)*5+CG, svgH=totalH+HDRH+60;
-  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svg.setAttribute('width',svgW);svg.setAttribute('height',svgH);
-  svg.style.display='block';svg.style.minWidth=svgW+'px';
-
-  ROUNDS.forEach((r,ri)=>{
-    const x=CG+ri*(CW+CG);
-    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
-    rect.setAttribute('x',x);rect.setAttribute('y',4);rect.setAttribute('width',CW);rect.setAttribute('height',36);
-    rect.setAttribute('rx',6);rect.setAttribute('fill','#0d5228');svg.appendChild(rect);
-    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
-    t.setAttribute('x',x+CW/2);t.setAttribute('y',17);t.setAttribute('text-anchor','middle');
-    t.setAttribute('fill','#f0b429');t.setAttribute('font-family','Bebas Neue,sans-serif');t.setAttribute('font-size','13');
-    t.textContent=r.name;svg.appendChild(t);
-    const t2=document.createElementNS('http://www.w3.org/2000/svg','text');
-    t2.setAttribute('x',x+CW/2);t2.setAttribute('y',32);t2.setAttribute('text-anchor','middle');
-    t2.setAttribute('fill','#8a9aa0');t2.setAttribute('font-family','Inter,sans-serif');t2.setAttribute('font-size','9');
-    t2.textContent=r.dates;svg.appendChild(t2);
-  });
-
-  function drawMatch(x,yC,tl,tt,bl,bt){
-    const y=yC-SH-GAP/2,h=SH*2+GAP;
-    const card=document.createElementNS('http://www.w3.org/2000/svg','rect');
-    card.setAttribute('x',x);card.setAttribute('y',y);card.setAttribute('width',CW);card.setAttribute('height',h);
-    card.setAttribute('rx',6);card.setAttribute('fill','#0e2718');
-    card.setAttribute('stroke','rgba(255,255,255,0.07)');card.setAttribute('stroke-width','1');svg.appendChild(card);
-    const div=document.createElementNS('http://www.w3.org/2000/svg','line');
-    div.setAttribute('x1',x+6);div.setAttribute('y1',yC);div.setAttribute('x2',x+CW-6);div.setAttribute('y2',yC);
-    div.setAttribute('stroke','rgba(255,255,255,0.07)');div.setAttribute('stroke-width','1');svg.appendChild(div);
-    [[tl,tt,yC-SH/2],[bl,bt,yC+SH/2]].forEach(([lbl,name,y])=>{
-      const l=document.createElementNS('http://www.w3.org/2000/svg','text');
-      l.setAttribute('x',x+8);l.setAttribute('y',y-6);l.setAttribute('fill','#8a9aa0');
-      l.setAttribute('font-size','8');l.setAttribute('font-family','Inter,sans-serif');l.textContent=lbl;svg.appendChild(l);
-      const n=document.createElementNS('http://www.w3.org/2000/svg','text');
-      n.setAttribute('x',x+8);n.setAttribute('y',y+8);
-      n.setAttribute('fill',name==='TBD'?'#8a9aa0':'#f5f7f2');
-      n.setAttribute('font-size',name==='TBD'?'10':'11');n.setAttribute('font-weight',name!=='TBD'?'600':'400');
-      n.setAttribute('font-family','Inter,sans-serif');n.textContent=name==='TBD'?'—':name;svg.appendChild(n);
-    });
-    return {rightX:x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8};
-  }
-
-  function conn(fx,fty,fby,tx,ty){
-    const mx=fx+CG/2;
-    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
-    p.setAttribute('d',`M${fx} ${fty} H${mx} V${fby} H${mx} V${ty} H${tx}`);
-    p.setAttribute('fill','none');p.setAttribute('stroke','rgba(255,255,255,0.1)');p.setAttribute('stroke-width','1.5');
-    svg.appendChild(p);
-  }
-
-  const r32x=CG;
-  let r32c=R32.map((m,i)=>{
-    const yC=HDRH+matchH*i+matchH/2;
-    return drawMatch(r32x,yC,m[0],m[1],m[2],m[3]);
-  });
-
-  const r16x=r32x+CW+CG;
-  let r16c=[];
-  for(let i=0;i<8;i++){
-    const t=r32c[i*2],b=r32c[i*2+1],yC=(t.centerY+b.centerY)/2;
-    drawMatch(r16x,yC,'W M'+(i*2+73),'TBD','W M'+(i*2+74),'TBD');
-    conn(t.rightX,t.topY,t.centerY,r16x,yC-SH/2+8);
-    conn(b.rightX,b.centerY,b.botY,r16x,yC+SH/2+8);
-    r16c.push({rightX:r16x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
-  }
-
-  const qfx=r16x+CW+CG;
-  let qfc=[];
-  for(let i=0;i<4;i++){
-    const t=r16c[i*2],b=r16c[i*2+1],yC=(t.centerY+b.centerY)/2;
-    drawMatch(qfx,yC,'W R16-'+(i*2+1),'TBD','W R16-'+(i*2+2),'TBD');
-    conn(t.rightX,t.topY,t.centerY,qfx,yC-SH/2+8);
-    conn(b.rightX,b.centerY,b.botY,qfx,yC+SH/2+8);
-    qfc.push({rightX:qfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
-  }
-
-  const sfx=qfx+CW+CG;
-  let sfc=[];
-  for(let i=0;i<2;i++){
-    const t=qfc[i*2],b=qfc[i*2+1],yC=(t.centerY+b.centerY)/2;
-    drawMatch(sfx,yC,'W QF-'+(i*2+1),'TBD','W QF-'+(i*2+2),'TBD');
-    conn(t.rightX,t.topY,t.centerY,sfx,yC-SH/2+8);
-    conn(b.rightX,b.centerY,b.botY,sfx,yC+SH/2+8);
-    sfc.push({rightX:sfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
-  }
-
-  const finx=sfx+CW+CG;
-  const finY=(sfc[0].centerY+sfc[1].centerY)/2;
-  drawMatch(finx,finY,'W SF-1','TBD','W SF-2','TBD');
-  conn(sfc[0].rightX,sfc[0].topY,sfc[0].centerY,finx,finY-SH/2+8);
-  conn(sfc[1].rightX,sfc[1].centerY,sfc[1].botY,finx,finY+SH/2+8);
-  const fl=document.createElementNS('http://www.w3.org/2000/svg','text');
-  fl.setAttribute('x',finx+CW/2);fl.setAttribute('y',finY-SH-GAP-6);fl.setAttribute('text-anchor','middle');
-  fl.setAttribute('fill','#f0b429');fl.setAttribute('font-size','10');fl.setAttribute('font-family','Bebas Neue,sans-serif');
-  fl.setAttribute('letter-spacing','1');fl.textContent='🏆 FINAL · 19 Jul';svg.appendChild(fl);
-
-  const thirdY=finY+SH*2+GAP*4;
-  drawMatch(finx,thirdY,'L SF-1','TBD','L SF-2','TBD');
-  const tl=document.createElementNS('http://www.w3.org/2000/svg','text');
-  tl.setAttribute('x',finx+CW/2);tl.setAttribute('y',thirdY-SH-GAP-6);tl.setAttribute('text-anchor','middle');
-  tl.setAttribute('fill','#c07840');tl.setAttribute('font-size','10');tl.setAttribute('font-family','Bebas Neue,sans-serif');
-  tl.setAttribute('letter-spacing','1');tl.textContent='🥉 3RD PLACE · 18 Jul';svg.appendChild(tl);
-
-  svg.setAttribute('height',Math.max(thirdY+SH+GAP+20,svgH));
-  wrap.appendChild(svg);
-}
-
-// ── ENTER KEY ON LOGIN ────────────────────────────────────────────────────────
-document.getElementById('login-pin').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
-
-// ── INIT ──────────────────────────────────────────────────────────────────────
-renderGroups();
-buildBracket();
-loadAll();
-
-
-// ── PLAYER SEARCH ───────────────────────────────────────────────────────────
-const FLAG_MAP = {
-  'Mexico':'🇲🇽','South Africa':'🇿🇦','South Korea':'🇰🇷','Czechia':'🇨🇿',
-  'Canada':'🇨🇦','Bosnia & Herz.':'🇧🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭',
-  'Brazil':'🇧🇷','Morocco':'🇲🇦','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Haiti':'🇭🇹',
-  'USA':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺','Türkiye':'🇹🇷',
-  'Germany':'🇩🇪',"Côte d'Ivoire":'🇨🇮','Ecuador':'🇪🇨','Curaçao':'🇨🇼',
-  'Netherlands':'🇳🇱','Japan':'🇯🇵','Sweden':'🇸🇪','Tunisia':'🇹🇳',
-  'Belgium':'🇧🇪','Egypt':'🇪🇬','IR Iran':'🇮🇷','New Zealand':'🇳🇿',
-  'Spain':'🇪🇸','Cabo Verde':'🇨🇻','Saudi Arabia':'🇸🇦','Uruguay':'🇺🇾',
-  'France':'🇫🇷','Senegal':'🇸🇳','Iraq':'🇮🇶','Norway':'🇳🇴',
-  'Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴',
-  'Portugal':'🇵🇹','DR Congo':'🇨🇩','Uzbekistan':'🇺🇿','Colombia':'🇨🇴',
-  'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦',
-};
-
-let allPlayers = [];
-let allTeamsData = [];
-let sortCol = 'name';
-let sortAsc = true;
-
-async function loadSquads() {
-  const status = document.getElementById('squad-status');
-  try {
-    let allP = [];
-    let from = 0;
-    const batchSize = 500;
-    while (true) {
-      const batch = await sb(`players?select=*&order=team_name,shirt_number&limit=${batchSize}&offset=${from}`);
-      if (!batch || batch.length === 0) break;
-      allP = allP.concat(batch);
-      if (batch.length < batchSize) break;
-      from += batchSize;
-    }
-    const teams = await sb('teams?select=name,group_letter,flag_emoji&order=group_letter,name');
-    allPlayers = allP;
-    allTeamsData = teams;
-    buildFilters(teams);
-    status.style.display = 'none';
-    renderPlayers();
-  } catch(e) {
-    console.error('Player load error:', e);
-    status.textContent = 'Could not load players: ' + e.message;
-  }
-}
-
-function buildFilters(teams) {
-  // Group filter
-  const groupSel = document.getElementById('filter-group');
-  const letters = [...new Set(teams.map(t => t.group_letter))].sort();
-  letters.forEach(l => {
-    const o = document.createElement('option');
-    o.value = l; o.textContent = 'Group ' + l;
-    groupSel.appendChild(o);
-  });
-}
-
-function onGroupChange() {
-  // Rebuild team dropdown based on selected group
-  const grp = document.getElementById('filter-group').value;
-  const teamSel = document.getElementById('filter-team');
-  teamSel.innerHTML = '<option value="">All teams</option>';
-  const filtered = grp ? allTeamsData.filter(t => t.group_letter === grp) : allTeamsData;
-  filtered.forEach(t => {
-    const flag = FLAG_MAP[t.name] || '';
-    const o = document.createElement('option');
-    o.value = t.name; o.textContent = flag + ' ' + t.name;
-    teamSel.appendChild(o);
-  });
-  renderPlayers();
-}
-
-function sortBy(col) {
-  if (sortCol === col) { sortAsc = !sortAsc; }
-  else { sortCol = col; sortAsc = col === 'name'; }
-  // Update header classes
-  document.querySelectorAll('.player-table th').forEach(th => {
-    th.classList.remove('sorted','asc');
-  });
-  const ths = document.querySelectorAll('.player-table th');
-  const cols = ['shirt_number','name','position','team_name','club','goals','assists','yellow_cards','red_cards'];
-  const idx = cols.indexOf(col);
-  if (idx >= 0 && ths[idx]) {
-    ths[idx].classList.add('sorted');
-    if (sortAsc) ths[idx].classList.add('asc');
-  }
-  renderPlayers();
-}
-
-function renderPlayers() {
-  const q     = document.getElementById('player-search').value.trim().toLowerCase();
-  const grp   = document.getElementById('filter-group').value;
-  const team  = document.getElementById('filter-team').value;
-  const pos   = document.getElementById('filter-pos').value;
-  const meta  = document.getElementById('player-meta');
-  const tbody = document.getElementById('player-tbody');
-
-  // Build team→group lookup
-  const teamGroup = {};
-  allTeamsData.forEach(t => teamGroup[t.name] = t.group_letter);
-
-  // Filter
-  let players = allPlayers.filter(p => {
-    if (q    && !p.name.toLowerCase().includes(q) && !p.club.toLowerCase().includes(q)) return false;
-    if (grp  && teamGroup[p.team_name] !== grp) return false;
-    if (team && p.team_name !== team) return false;
-    if (pos  && p.position !== pos) return false;
-    return true;
-  });
-
-  // Sort
-  players.sort((a, b) => {
-    let av = a[sortCol], bv = b[sortCol];
-    if (typeof av === 'string') av = av.toLowerCase();
-    if (typeof bv === 'string') bv = bv.toLowerCase();
-    if (av < bv) return sortAsc ? -1 : 1;
-    if (av > bv) return sortAsc ? 1 : -1;
-    return 0;
-  });
-
-  meta.textContent = players.length === allPlayers.length
-    ? `${allPlayers.length} players`
-    : `${players.length} of ${allPlayers.length} players`;
-
-  if (players.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--dim);padding:24px">No players found</td></tr>`;
-    return;
-  }
-
-  const flag = name => FLAG_MAP[name] || '';
-  tbody.innerHTML = players.map(p => {
-    const isNorway = p.team_name === 'Norway';
-    const stat = (v, warn) => {
-      const nz = v > 0;
-      const color = warn && nz ? warn : '';
-      return `<td class="pt-stat ${nz?'nonzero':'zero'}" style="${color?'color:'+color:''}">${nz ? v : '—'}</td>`;
-    };
-    return `<tr class="${isNorway?'norway-row':''}">
-      <td class="pt-num">${p.shirt_number}</td>
-      <td class="pt-name">${p.name}</td>
-      <td><span class="pt-pos pos-${p.position}">${p.position}</span></td>
-      <td class="pt-team">${flag(p.team_name)} ${p.team_name}</td>
-      <td class="pt-club">${p.club || '—'}</td>
-      ${stat(p.goals || 0)}
-      ${stat(p.assists || 0)}
-      ${stat(p.yellow_cards || 0, '#f0b429')}
-      ${stat(p.red_cards || 0, '#e03434')}
-    </tr>`;
-  }).join('');
-}
-
-loadSquads();
-
+load();
 </script>
 </body>
 </html>

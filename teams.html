@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC 2026 – Teams</title>
+<link rel="stylesheet" href="shared_styles.css">
+<style>
+.filter-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.teams-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }
+.team-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:transform .15s; }
+.team-card:hover { transform:translateY(-2px); }
+.team-card.norway { border-color:rgba(239,43,45,.4); }
+.team-hdr { display:flex; align-items:center; gap:12px; padding:14px; }
+.team-flag { font-size:28px; line-height:1; }
+.team-info { flex:1; }
+.team-name { font-weight:700; font-size:15px; }
+.team-meta { font-size:11px; color:var(--dim); margin-top:2px; }
+.team-rank  { font-family:'Bebas Neue',sans-serif; font-size:28px; color:var(--gold); }
+.team-form  { display:flex; gap:3px; padding:0 14px 14px; }
+.form-dot {
+  width:28px; height:28px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:700;
+}
+.form-w { background:rgba(96,185,122,.2); color:var(--green); }
+.form-d { background:rgba(240,180,41,.15); color:var(--gold); }
+.form-l { background:rgba(224,52,52,.15); color:#e07070; }
+.form-u { background:rgba(255,255,255,.05); color:var(--dim); }
+.team-stats { display:grid; grid-template-columns:1fr 1fr 1fr; border-top:1px solid var(--border); }
+.stat-cell { padding:10px; text-align:center; border-right:1px solid var(--border); }
+.stat-cell:last-child { border-right:none; }
+.stat-val { font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:600; }
+.stat-lbl { font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; margin-top:2px; }
+.loading { color:var(--dim); font-size:13px; text-align:center; padding:40px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-header">
+    <div class="tourn-label">FIFA World Cup 2026</div>
+    <h1>All <span>Teams</span></h1>
+    <div class="subtitle">48 teams · FIFA ranking · Last 5 results</div>
+  </div>
+
+  <div class="filter-row">
+    <input type="text" class="inp" id="team-search" placeholder="🔍 Search team…" oninput="renderTeams()" style="flex:1;min-width:180px">
+    <select class="inp" id="filter-conf" onchange="renderTeams()">
+      <option value="">All confederations</option>
+      <option>UEFA</option><option>CONMEBOL</option><option>CONCACAF</option>
+      <option>CAF</option><option>AFC</option><option>OFC</option>
+    </select>
+    <select class="inp" id="filter-group" onchange="renderTeams()">
+      <option value="">All groups</option>
+      ${['A','B','C','D','E','F','G','H','I','J','K','L'].map(l=>`<option>Group ${l}</option>`).join('')}
+    </select>
+  </div>
+  <div class="loading" id="teams-status">⏳ Loading teams…</div>
+  <div class="teams-grid" id="teams-grid"></div>
+</div>
+
+<script src="shared_constants.js"></script>
+<script src="shared_nav.js"></script>
+<script>
+injectNav('teams');
+let allTeams = [], allMatches = [];
+
+async function loadTeams() {
+  const status = document.getElementById('teams-status');
+  try {
+    // Load teams from Supabase
+    allTeams = await sb('teams?select=*&order=group_letter,name');
+
+    // Try to get match data from worldcup26.ir for form
+    try {
+      const res = await fetch('https://corsproxy.io/?url=https://worldcup26.ir/get/games');
+      if (res.ok) allMatches = await res.json();
+    } catch(e) {}
+
+    status.style.display = 'none';
+    renderTeams();
+  } catch(e) {
+    status.textContent = 'Could not load teams: ' + e.message;
+  }
+}
+
+function getTeamForm(teamName) {
+  // Get last 5 results for this team from match data
+  const games = (Array.isArray(allMatches) ? allMatches : (allMatches.games||[]))
+    .filter(m => {
+      const h = (m.home_team||m.home||m.team1||{}).name||m.home_team_name||'';
+      const a = (m.away_team||m.away||m.team2||{}).name||m.away_team_name||'';
+      return h.toLowerCase()===teamName.toLowerCase() || a.toLowerCase()===teamName.toLowerCase();
+    })
+    .filter(m => m.score || m.result || m.home_score !== undefined)
+    .slice(-5);
+
+  return games.map(m => {
+    const h = (m.home_team||m.home||m.team1||{}).name||m.home_team_name||'';
+    const hs = m.home_score ?? (m.score?.ft?.[0]) ?? parseInt((m.result||'').split('-')[0]);
+    const as = m.away_score ?? (m.score?.ft?.[1]) ?? parseInt((m.result||'').split('-')[1]);
+    if (isNaN(hs)||isNaN(as)) return 'U';
+    const isHome = h.toLowerCase()===teamName.toLowerCase();
+    if (hs===as) return 'D';
+    if (isHome) return hs>as?'W':'L';
+    return as>hs?'W':'L';
+  });
+}
+
+function getTeamStats(teamName) {
+  const games = (Array.isArray(allMatches) ? allMatches : (allMatches.games||[]))
+    .filter(m => {
+      const h = (m.home_team||m.home||m.team1||{}).name||m.home_team_name||'';
+      const a = (m.away_team||m.away||m.team2||{}).name||m.away_team_name||'';
+      return (h.toLowerCase()===teamName.toLowerCase() || a.toLowerCase()===teamName.toLowerCase())
+        && (m.score || m.result || m.home_score !== undefined);
+    });
+
+  let gf=0, ga=0;
+  games.forEach(m => {
+    const h = (m.home_team||m.home||m.team1||{}).name||m.home_team_name||'';
+    const hs = m.home_score ?? (m.score?.ft?.[0]) ?? parseInt((m.result||'').split('-')[0]);
+    const as = m.away_score ?? (m.score?.ft?.[1]) ?? parseInt((m.result||'').split('-')[1]);
+    if (isNaN(hs)||isNaN(as)) return;
+    const isHome = h.toLowerCase()===teamName.toLowerCase();
+    gf += isHome?hs:as; ga += isHome?as:hs;
+  });
+  return { played: games.length, gf, ga };
+}
+
+function renderTeams() {
+  const q    = document.getElementById('team-search').value.trim().toLowerCase();
+  const conf = document.getElementById('filter-conf').value;
+  const grp  = document.getElementById('filter-group').value.replace('Group ','');
+
+  const filtered = allTeams.filter(t => {
+    if (q    && !t.name.toLowerCase().includes(q)) return false;
+    if (conf && t.confederation !== conf) return false;
+    if (grp  && t.group_letter !== grp) return false;
+    return true;
+  });
+
+  const grid = document.getElementById('teams-grid');
+  if (!filtered.length) { grid.innerHTML = '<div class="loading">No teams found</div>'; return; }
+
+  grid.innerHTML = filtered.map(t => {
+    const isNor = t.name.toLowerCase()==='norway';
+    const form  = getTeamForm(t.name);
+    const stats = getTeamStats(t.name);
+    const flag  = FLAG_MAP[t.name]||t.flag_emoji||'🏳';
+
+    const formDots = Array(5).fill('U').map((_, i) => form[i]||'U');
+    const formHtml = formDots.map(r =>
+      `<div class="form-dot form-${r.toLowerCase()}">${r}</div>`
+    ).join('');
+
+    return `<div class="team-card${isNor?' norway':''}">
+      <div class="team-hdr">
+        <div class="team-flag">${flag}</div>
+        <div class="team-info">
+          <div class="team-name">${t.name}${isNor?' 🇳🇴':''}</div>
+          <div class="team-meta">Group ${t.group_letter} · ${t.confederation||''}</div>
+        </div>
+      </div>
+      <div class="team-form">${formHtml}</div>
+      <div class="team-stats">
+        <div class="stat-cell">
+          <div class="stat-val">${stats.played}</div>
+          <div class="stat-lbl">Played</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-val">${stats.gf}</div>
+          <div class="stat-lbl">Goals for</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-val" style="color:${stats.ga>0?'#e07070':'var(--dim)'}">${stats.ga}</div>
+          <div class="stat-lbl">Goals against</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+loadTeams();
+</script>
+</body>
+</html>

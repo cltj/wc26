@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC 2026 – Players</title>
+<link rel="stylesheet" href="shared_styles.css">
+<style>
+.controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.controls .inp { flex:2; min-width:160px; }
+.results-meta { font-size:11px; color:var(--dim); margin-bottom:10px; min-height:16px; }
+.tbl-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:12px; }
+th { background:#0d3320; color:var(--dim); font-weight:700; font-size:10px; letter-spacing:.08em; text-transform:uppercase; padding:8px 10px; text-align:left; white-space:nowrap; cursor:pointer; user-select:none; }
+th:hover { color:var(--gold); }
+th.sorted { color:var(--gold); }
+th.sorted::after { content:' ↓'; font-size:9px; }
+th.sorted.asc::after { content:' ↑'; }
+td { padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; vertical-align:middle; }
+tr:hover td { background:rgba(255,255,255,.025); }
+tr.norway-row td { border-left:2px solid var(--norway); }
+.td-num  { font-family:'JetBrains Mono',monospace; color:var(--dim); width:32px; }
+.td-name { font-weight:600; }
+.td-team { color:var(--dim); }
+.td-club { color:var(--dim); max-width:140px; overflow:hidden; text-overflow:ellipsis; }
+.td-stat { text-align:center; font-family:'JetBrains Mono',monospace; }
+.td-stat.nz { color:var(--white); font-weight:600; }
+.td-stat.z  { color:rgba(255,255,255,.2); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-header">
+    <div class="tourn-label">FIFA World Cup 2026</div>
+    <h1>Player <span>Stats</span></h1>
+    <div class="subtitle">1,245 players · All 48 squads · Search & filter</div>
+  </div>
+
+  <div class="controls">
+    <input type="text" class="inp" id="p-search" placeholder="🔍  Search player or club…" oninput="render()">
+    <select class="inp" id="p-group" onchange="onGroupChange()">
+      <option value="">All groups</option>
+      ${['A','B','C','D','E','F','G','H','I','J','K','L'].map(l=>`<option value="${l}">Group ${l}</option>`).join('')}
+    </select>
+    <select class="inp" id="p-team" onchange="render()">
+      <option value="">All teams</option>
+    </select>
+    <select class="inp" id="p-pos" onchange="render()">
+      <option value="">All positions</option>
+      <option value="GK">GK – Goalkeepers</option>
+      <option value="DF">DF – Defenders</option>
+      <option value="MF">MF – Midfielders</option>
+      <option value="FW">FW – Forwards</option>
+    </select>
+  </div>
+
+  <div class="results-meta" id="p-meta"></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="td-num" onclick="sortBy('shirt_number')">#</th>
+          <th onclick="sortBy('name')">Player</th>
+          <th onclick="sortBy('position')">Pos</th>
+          <th onclick="sortBy('team_name')">Team</th>
+          <th onclick="sortBy('club')">Club</th>
+          <th onclick="sortBy('goals')"    title="Goals">⚽</th>
+          <th onclick="sortBy('assists')"  title="Assists">🎯</th>
+          <th onclick="sortBy('yellow_cards')" title="Yellow cards">🟨</th>
+          <th onclick="sortBy('red_cards')"    title="Red cards">🟥</th>
+        </tr>
+      </thead>
+      <tbody id="p-tbody"></tbody>
+    </table>
+  </div>
+  <div style="color:var(--dim);font-size:13px;text-align:center;padding:20px" id="p-status">Loading players…</div>
+</div>
+
+<script src="shared_constants.js"></script>
+<script src="shared_nav.js"></script>
+<script>
+injectNav('players');
+let allPlayers=[], allTeamsData=[], sortCol='name', sortAsc=true;
+
+async function loadAll() {
+  const status = document.getElementById('p-status');
+  try {
+    let p=[], from=0;
+    while(true){
+      const b = await sb(`players?select=*&order=team_name,shirt_number&limit=500&offset=${from}`);
+      if(!b||!b.length) break;
+      p=p.concat(b);
+      if(b.length<500) break;
+      from+=500;
+    }
+    allTeamsData = await sb('teams?select=name,group_letter&order=group_letter,name');
+    allPlayers = p;
+    populateTeamDropdown('');
+    status.style.display='none';
+    render();
+  } catch(e) { status.textContent='Error: '+e.message; }
+}
+
+function populateTeamDropdown(grp) {
+  const sel = document.getElementById('p-team');
+  const cur = sel.value;
+  sel.innerHTML='<option value="">All teams</option>';
+  (grp ? allTeamsData.filter(t=>t.group_letter===grp) : allTeamsData).forEach(t=>{
+    const o=document.createElement('option');
+    o.value=t.name; o.textContent=(FLAG_MAP[t.name]||'')+' '+t.name;
+    sel.appendChild(o);
+  });
+  sel.value = cur;
+}
+
+function onGroupChange(){
+  populateTeamDropdown(document.getElementById('p-group').value);
+  render();
+}
+
+const teamGroup = () => {
+  const m={};
+  allTeamsData.forEach(t=>m[t.name]=t.group_letter);
+  return m;
+};
+
+function sortBy(col){
+  if(sortCol===col){sortAsc=!sortAsc;}else{sortCol=col;sortAsc=col==='name';}
+  document.querySelectorAll('th').forEach(th=>{th.classList.remove('sorted','asc');});
+  const cols=['shirt_number','name','position','team_name','club','goals','assists','yellow_cards','red_cards'];
+  const th=document.querySelectorAll('th')[cols.indexOf(col)];
+  if(th){th.classList.add('sorted');if(sortAsc)th.classList.add('asc');}
+  render();
+}
+
+function render(){
+  const q   =document.getElementById('p-search').value.trim().toLowerCase();
+  const grp =document.getElementById('p-group').value;
+  const team=document.getElementById('p-team').value;
+  const pos =document.getElementById('p-pos').value;
+  const tg  =teamGroup();
+
+  let players=allPlayers.filter(p=>{
+    if(q    &&!p.name.toLowerCase().includes(q)&&!(p.club||'').toLowerCase().includes(q)) return false;
+    if(grp  &&tg[p.team_name]!==grp) return false;
+    if(team &&p.team_name!==team) return false;
+    if(pos  &&p.position!==pos) return false;
+    return true;
+  });
+
+  players.sort((a,b)=>{
+    let av=a[sortCol]??0, bv=b[sortCol]??0;
+    if(typeof av==='string')av=av.toLowerCase();
+    if(typeof bv==='string')bv=bv.toLowerCase();
+    return sortAsc?(av<bv?-1:av>bv?1:0):(bv<av?-1:bv>av?1:0);
+  });
+
+  document.getElementById('p-meta').textContent =
+    players.length===allPlayers.length
+      ? `${allPlayers.length} players`
+      : `${players.length} of ${allPlayers.length} players`;
+
+  const tbody=document.getElementById('p-tbody');
+  if(!players.length){
+    tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--dim);padding:24px">No players found</td></tr>`;
+    return;
+  }
+
+  const stat=(v,warn)=>{
+    const nz=(v||0)>0;
+    return `<td class="td-stat ${nz?'nz':'z'}" style="${warn&&nz?'color:'+warn:''}">${nz?v:'—'}</td>`;
+  };
+
+  tbody.innerHTML=players.map(p=>{
+    const isNor=p.team_name==='Norway';
+    return `<tr class="${isNor?'norway-row':''}">
+      <td class="td-num">${p.shirt_number}</td>
+      <td class="td-name">${p.name}</td>
+      <td><span class="pos pos-${p.position}">${p.position}</span></td>
+      <td class="td-team">${FLAG_MAP[p.team_name]||''} ${p.team_name}</td>
+      <td class="td-club">${p.club||'—'}</td>
+      ${stat(p.goals)}
+      ${stat(p.assists)}
+      ${stat(p.yellow_cards,'#f0b429')}
+      ${stat(p.red_cards,'#e03434')}
+    </tr>`;
+  }).join('');
+}
+
+loadAll();
+</script>
+</body>
+</html>

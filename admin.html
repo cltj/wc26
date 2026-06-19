@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC 2026 – Admin</title>
+<link rel="stylesheet" href="shared_styles.css">
+<style>
+.admin-grid { display:flex; flex-direction:column; gap:24px; }
+.admin-row  { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.admin-note { font-size:11px; color:var(--dim); margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-header">
+    <div class="tourn-label">FIFA World Cup 2026</div>
+    <h1>Admin <span>Panel</span></h1>
+    <div class="subtitle">TJ only</div>
+  </div>
+
+  <div id="access-denied" style="display:none;text-align:center;padding:60px 20px;color:var(--dim)">
+    <div style="font-size:48px;margin-bottom:16px">🔒</div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:8px">Admin access only</div>
+    <div style="font-size:13px">Sign in as TJ to access this page.</div>
+  </div>
+
+  <div id="admin-content">
+    <div class="admin-grid">
+
+      <!-- Enter result -->
+      <div class="admin-box">
+        <div class="admin-label">Enter Game Result</div>
+        <div class="admin-row">
+          <select class="inp" id="game-sel" style="flex:2;min-width:200px"></select>
+          <input class="inp" id="result-inp" placeholder="e.g. 2-1" maxlength="6" style="width:90px">
+          <button class="btn btn-gold" onclick="saveResult()">Save Result</button>
+          <span id="result-msg" style="font-size:12px;color:var(--green)"></span>
+        </div>
+        <div class="admin-note">Results auto-calculate everyone's points on the leaderboard.</div>
+      </div>
+
+      <!-- Auto sync -->
+      <div class="admin-box">
+        <div class="admin-label">⚡ Auto Sync</div>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:12px">
+          Calls Claude with web search to fetch latest results, group standings, player goals/assists/cards and writes them to Supabase. Run 1–4× per day.
+        </p>
+        <div class="admin-row">
+          <button class="btn btn-green" id="sync-btn" onclick="runSync()">⚡ Sync Now</button>
+          <span id="sync-status" style="font-size:12px;color:var(--dim)"></span>
+        </div>
+        <div class="sync-log" id="sync-log"></div>
+      </div>
+
+      <!-- Manual JSON sync -->
+      <div class="admin-box">
+        <div class="admin-label">Manual JSON Sync</div>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:10px">
+          If auto-sync fails, paste JSON from Claude here.
+        </p>
+        <textarea class="inp" id="manual-json" rows="5"
+          placeholder='{"games":[...],"groups":{...},"top_scorers":[...],"bookings":[]}'
+          style="width:100%;resize:vertical;font-size:11px;font-family:var(--mono)"></textarea>
+        <div class="admin-row" style="margin-top:8px">
+          <button class="btn btn-dim" onclick="runManualSync()">Apply JSON</button>
+          <span id="manual-msg" style="font-size:12px;color:var(--green)"></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="shared_constants.js"></script>
+<script src="shared_nav.js"></script>
+<script>
+injectNav('admin');
+
+// Access control
+window.addEventListener('DOMContentLoaded', () => {
+  const user = getUser();
+  if (user !== ADMIN) {
+    document.getElementById('admin-content').style.display = 'none';
+    document.getElementById('access-denied').style.display = 'block';
+  } else {
+    loadGames();
+  }
+});
+
+let allGames = [];
+
+async function loadGames() {
+  allGames = await sb('games?select=*&order=id');
+  const sel = document.getElementById('game-sel');
+  sel.innerHTML = allGames.map(g =>
+    `<option value="${g.id}">#${g.id} ${g.home} vs ${g.away}${g.result?' ('+g.result+')':''}</option>`
+  ).join('');
+}
+
+async function saveResult() {
+  const gameId = parseInt(document.getElementById('game-sel').value);
+  const result = document.getElementById('result-inp').value.trim();
+  const msg    = document.getElementById('result-msg');
+  if (!result) return;
+  try {
+    await sbAdmin(`games?id=eq.${gameId}`, { method:'PATCH', body: JSON.stringify({result}) });
+    msg.textContent = '✓ Saved';
+    setTimeout(() => { msg.textContent=''; loadGames(); }, 2000);
+  } catch(e) { msg.textContent='Error: '+e.message; msg.style.color='var(--red)'; }
+}
+
+// ── Sync ─────────────────────────────────────────────────────────────────────
+function log(msg, type='') {
+  const el = document.getElementById('sync-log');
+  el.style.display='block';
+  const ts = new Date().toLocaleTimeString('no-NO');
+  el.innerHTML += `<span class="${type}">[${ts}] ${msg}</span>\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function applySync(parsed) {
+  let gameUpdates=0;
+  for(const g of (parsed.games||[])){
+    if(!g.result) continue;
+    await sbAdmin(`games?id=eq.${g.id}`,{method:'PATCH',body:JSON.stringify({result:g.result})});
+    gameUpdates++;
+  }
+  if(gameUpdates) log(`✓ ${gameUpdates} game results updated`,'ok');
+
+  const pm={};
+  for(const p of (parsed.top_scorers||[])){const k=p.name.toLowerCase();pm[k]={...pm[k],name:p.name,team:p.team,goals:p.goals||0,assists:p.assists||0};}
+  for(const p of (parsed.bookings||[])){const k=p.name.toLowerCase();pm[k]={...pm[k],name:p.name,team:p.team,yellow_cards:p.yellow_cards||0,red_cards:p.red_cards||0};}
+  let pu=0;
+  for(const p of Object.values(pm)){
+    const u={};
+    if(p.goals!==undefined)u.goals=p.goals;if(p.assists!==undefined)u.assists=p.assists;
+    if(p.yellow_cards!==undefined)u.yellow_cards=p.yellow_cards;if(p.red_cards!==undefined)u.red_cards=p.red_cards;
+    if(!Object.keys(u).length)continue;
+    const ln=p.name.split(' ').pop();
+    let url=`players?name=ilike.${encodeURIComponent('%'+ln+'%')}`;
+    if(p.team)url+=`&team_name=eq.${encodeURIComponent(p.team)}`;
+    try{await sbAdmin(url,{method:'PATCH',body:JSON.stringify(u)});pu++;}catch(e){}
+  }
+  if(pu) log(`✓ ${pu} player stats updated`,'ok');
+  if(gameUpdates) await loadGames();
+  log('✓ Sync complete','ok');
+}
+
+async function runSync() {
+  const btn=document.getElementById('sync-btn');
+  const status=document.getElementById('sync-status');
+  document.getElementById('sync-log').innerHTML='';
+  btn.disabled=true; btn.textContent='⏳ Syncing…';
+
+  const today=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const prompt=`Today is ${today}. Search the web and return current FIFA World Cup 2026 data as a single JSON object. Return ONLY valid JSON, no markdown.
+{
+  "games":[{"id":1,"result":"2-0"},...only played games],
+  "groups":{"A":[{"name":"Mexico","pld":2,"w":2,"d":0,"l":0,"gf":4,"ga":1,"pts":6}],...all 12 groups},
+  "top_scorers":[{"name":"Erling Haaland","team":"Norway","goals":3,"assists":1},...top 20],
+  "bookings":[{"name":"Player Name","team":"Team","yellow_cards":2,"red_cards":0},...all with cards]
+}
+Game IDs: 1=Mexico vs South Africa,2=Canada vs Bosnia,3=Brazil vs Morocco,4=Netherlands vs Japan,5=Belgium vs Egypt,6=Iraq vs Norway,7=England vs Croatia,8=Mexico vs Korea,9=USA vs Australia,10=Germany vs Ivory Coast,11=Spain vs Saudi Arabia,12=Norway vs Senegal,13=England vs Ghana,14=Scotland vs Brazil,15=Ecuador vs Germany,16=Norway vs France.`;
+
+  try {
+    log('Searching web for latest data…');
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})
+    });
+    if(!res.ok) throw new Error('API '+res.status);
+    const data=await res.json();
+    const text=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    log('✓ Data received','ok');
+    await applySync(parsed);
+    status.innerHTML=`<span style="color:var(--green)">✓ Synced ${new Date().toLocaleTimeString('no-NO')}</span>`;
+  } catch(e){
+    log('✗ '+e.message,'err');
+    status.innerHTML=`<span style="color:#e07070">Failed — try manual sync</span>`;
+  } finally {
+    btn.disabled=false; btn.textContent='⚡ Sync Now';
+  }
+}
+
+async function runManualSync(){
+  const raw=document.getElementById('manual-json').value.trim();
+  const msg=document.getElementById('manual-msg');
+  if(!raw){msg.textContent='Paste JSON first';return;}
+  try{
+    await applySync(JSON.parse(raw));
+    msg.textContent='✓ Applied!'; msg.style.color='var(--green)';
+    setTimeout(()=>msg.textContent='',3000);
+  }catch(e){msg.textContent='Invalid JSON: '+e.message;msg.style.color='#e07070';}
+}
+</script>
+</body>
+</html>

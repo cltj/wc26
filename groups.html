@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC 2026 – Group Stage</title>
+<link rel="stylesheet" href="shared_styles.css">
+<style>
+.groups-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(295px, 1fr)); gap: 12px; }
+.groups-meta { font-size: 11px; color: var(--dim); margin-bottom: 14px; }
+.groups-meta a { color: var(--gold); text-decoration: none; }
+.loading { color: var(--dim); font-size: 13px; text-align: center; padding: 40px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-header">
+    <div class="tourn-label">FIFA World Cup 2026</div>
+    <h1>Group <span>Stage</span></h1>
+    <div class="subtitle">12 groups · 48 teams · Top 2 + 8 best 3rd qualify</div>
+  </div>
+
+  <div class="groups-meta" id="groups-meta">Loading live standings…</div>
+  <div class="groups-grid" id="groups-grid"><div class="loading">⏳ Fetching standings…</div></div>
+</div>
+
+<script src="shared_constants.js"></script>
+<script src="shared_nav.js"></script>
+<script>
+injectNav('groups');
+
+async function loadGroups() {
+  const meta = document.getElementById('groups-meta');
+  const grid = document.getElementById('groups-grid');
+
+  // Try worldcup26.ir via corsproxy
+  let data = null;
+  try {
+    const res = await fetch('https://corsproxy.io/?url=https://worldcup26.ir/get/groups');
+    if (res.ok) data = await res.json();
+  } catch(e) {}
+
+  if (data) {
+    renderFromAPI(data);
+    meta.innerHTML = `Live standings via <a href="https://worldcup26.ir" target="_blank">worldcup26.ir</a> · 🟢 qualifies automatically · 🟡 possible best 3rd`;
+  } else {
+    // Fallback: static standings
+    renderStatic();
+    meta.innerHTML = `Standings as of 17 Jun (live fetch unavailable) · 🟢 qualifies · 🟡 possible 3rd`;
+  }
+}
+
+function renderFromAPI(data) {
+  // worldcup26.ir returns groups as array of group objects
+  // Each group has: name, teams: [{name, played, won, draw, lose, goals_for, goals_against, points}]
+  const grid = document.getElementById('groups-grid');
+  grid.innerHTML = '';
+  const groups = Array.isArray(data) ? data : (data.groups || []);
+  groups.forEach(grp => {
+    const letter = grp.name?.replace('Group ','') || grp.letter || '?';
+    const teams  = grp.teams || grp.standings || [];
+    const sorted = [...teams].sort((a,b) => {
+      const pa = a.points||a.pts||0, pb = b.points||b.pts||0;
+      if (pb!==pa) return pb-pa;
+      const gda = (a.goals_for||a.gf||0)-(a.goals_against||a.ga||0);
+      const gdb = (b.goals_for||b.gf||0)-(b.goals_against||b.ga||0);
+      return gdb-gda;
+    });
+    grid.appendChild(buildGroupCard(letter, sorted));
+  });
+}
+
+function buildGroupCard(letter, teams) {
+  const isNorwayGroup = teams.some(t => (t.name||t.team||'').toLowerCase()==='norway');
+  const div = document.createElement('div');
+  div.className = `group-card${isNorwayGroup?' norway':''}`;
+  div.innerHTML = `
+    <div class="group-hdr">Group ${letter}${isNorwayGroup?' 🇳🇴':''}</div>
+    <div class="group-col-hdr">
+      <span style="padding-left:10px">Team</span>
+      <span>P</span><span>W</span><span>D</span><span>L</span><span>GF</span><span>GA</span><span>Pts</span>
+    </div>
+    ${teams.map((t,i) => {
+      const name = t.name||t.team||'?';
+      const pld = t.played||t.p||t.pld||0;
+      const w   = t.won||t.w||0, d=t.draw||t.d||0, l=t.lose||t.l||0;
+      const gf  = t.goals_for||t.gf||0, ga=t.goals_against||t.ga||0;
+      const pts = t.points||t.pts||0;
+      const isNor = name.toLowerCase()==='norway';
+      let cls='group-row', bar='';
+      if (i<2&&pld>0){cls+=' qualify';bar='<span class="qbar qbar-g"></span>';}
+      else if(i===2&&pld>0){cls+=' maybe';bar='<span class="qbar qbar-y"></span>';}
+      return `<div class="${cls}">${bar}
+        <span style="padding-left:10px;font-weight:${isNor?700:400}">${FLAG_MAP[name]||''} ${name}${isNor?' 🇳🇴':''}</span>
+        <span style="color:var(--dim)">${pld}</span><span style="color:var(--dim)">${w}</span>
+        <span style="color:var(--dim)">${d}</span><span style="color:var(--dim)">${l}</span>
+        <span style="color:var(--dim)">${gf}</span><span style="color:var(--dim)">${ga}</span>
+        <span class="gpts${pts===0?' zero':''}">${pts}</span>
+      </div>`;
+    }).join('')}`;
+  return div;
+}
+
+function renderStatic() {
+  const GROUPS = {
+    A:[['Mexico',1,1,0,0,2,0,3],['South Korea',1,1,0,0,2,1,3],['Czechia',1,0,0,1,1,2,0],['South Africa',1,0,0,1,0,2,0]],
+    B:[['Canada',1,0,1,0,1,1,1],['Bosnia & Herz.',1,0,1,0,1,1,1],['Qatar',1,0,1,0,1,1,1],['Switzerland',1,0,1,0,1,1,1]],
+    C:[['Scotland',1,1,0,0,1,0,3],['Brazil',1,0,1,0,1,1,1],['Morocco',1,0,1,0,1,1,1],['Haiti',1,0,0,1,0,1,0]],
+    D:[['USA',1,1,0,0,4,1,3],['Australia',1,1,0,0,2,0,3],['Paraguay',1,0,0,1,1,4,0],['Türkiye',1,0,0,1,0,2,0]],
+    E:[['Germany',1,1,0,0,7,1,3],["Côte d'Ivoire",1,1,0,0,1,0,3],['Ecuador',1,0,0,1,0,1,0],['Curaçao',1,0,0,1,1,7,0]],
+    F:[['Sweden',1,1,0,0,5,1,3],['Netherlands',1,0,1,0,2,2,1],['Japan',1,0,1,0,2,2,1],['Tunisia',1,0,0,1,1,5,0]],
+    G:[['Belgium',1,0,1,0,1,1,1],['Egypt',1,0,1,0,1,1,1],['IR Iran',1,0,1,0,2,2,1],['New Zealand',1,0,1,0,2,2,1]],
+    H:[['Saudi Arabia',1,0,1,0,1,1,1],['Uruguay',1,0,1,0,1,1,1],['Cabo Verde',1,0,1,0,0,0,1],['Spain',1,0,1,0,0,0,1]],
+    I:[['France',1,1,0,0,3,1,3],['Norway',1,1,0,0,4,1,3],['Senegal',1,0,0,1,1,3,0],['Iraq',1,0,0,1,1,4,0]],
+    J:[['Argentina',1,1,0,0,3,0,3],['Austria',1,1,0,0,3,1,3],['Jordan',1,0,0,1,1,3,0],['Algeria',1,0,0,1,0,3,0]],
+    K:[['Portugal',0,0,0,0,0,0,0],['Colombia',0,0,0,0,0,0,0],['DR Congo',0,0,0,0,0,0,0],['Uzbekistan',0,0,0,0,0,0,0]],
+    L:[['England',0,0,0,0,0,0,0],['Croatia',0,0,0,0,0,0,0],['Ghana',0,0,0,0,0,0,0],['Panama',0,0,0,0,0,0,0]]
+  };
+  const grid = document.getElementById('groups-grid');
+  grid.innerHTML = '';
+  Object.entries(GROUPS).forEach(([letter, teams]) => {
+    const sorted = [...teams].sort((a,b)=>b[7]-a[7]||(b[5]-b[6])-(a[5]-a[6])||b[5]-a[5]);
+    const mapped = sorted.map(t => ({name:t[0],pld:t[1],w:t[2],d:t[3],l:t[4],gf:t[5],ga:t[6],pts:t[7]}));
+    grid.appendChild(buildGroupCard(letter, mapped));
+  });
+}
+
+loadGroups();
+</script>
+</body>
+</html>
