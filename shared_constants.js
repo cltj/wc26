@@ -32,7 +32,7 @@ const PLAYER_PHOTOS = {
   'Mari':   `${BASE_URL}/mari.jpeg`,
   'Benny':  `${BASE_URL}/placeholder.jpg`,
   'Martin': `${BASE_URL}/martin.png`,
-  'Helle':  `${BASE_URL}/placeholder.jpg`,
+  'Helle':  `${BASE_URL}/helle.jpeg`,
 };
 
 // ── Supabase helpers ─────────────────────────────────────────────────────────
