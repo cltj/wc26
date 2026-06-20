@@ -753,7 +753,10 @@ function buildTimeline(sched, rows) {
 
     const goals = typeof pm.goals === 'string' ? JSON.parse(pm.goals) : (pm.goals || []);
     goals.forEach(g => {
-      events.push({ type:'goal', minute:g.minute, min:parseMinute(g.minute), side, name, penalty:g.type==='penalty', og:g.type==='own goal' });
+      const isOg = g.type==='own goal';
+      // OGs display on the benefiting team's side (opposite of the scorer)
+      const goalSide = isOg ? (side==='home'?'away':'home') : side;
+      events.push({ type:'goal', minute:g.minute, min:parseMinute(g.minute), side:goalSide, name, penalty:g.type==='penalty', og:isOg });
     });
 
     const assists = typeof pm.assists === 'string' ? JSON.parse(pm.assists) : (pm.assists || []);

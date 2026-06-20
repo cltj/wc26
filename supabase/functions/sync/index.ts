@@ -276,7 +276,16 @@ async function espnMatchData(eventId: string): Promise<EspnMatchData> {
     if (tt.includes('goal')) {
       const og = tt.includes('own-goal') || (e.text || '').includes('Own Goal')
       const pk = !!e.penaltyKick
-      result.events.push({ type: 'goal', player: athlete, team: og ? '' : teamName, minute, og, penaltyKick: pk })
+      // For own goals, ESPN credits the benefiting team, but the scorer is on the other team.
+      // Find the scorer's actual team from rosters.
+      let goalTeam = teamName
+      if (og) {
+        // The scorer is on the opposite team
+        const otherTeam = result.lineups.find(l => l.team !== teamName)
+        const scorerInOther = otherTeam?.players.find(p => p.name === athlete)
+        goalTeam = scorerInOther ? otherTeam!.team : teamName
+      }
+      result.events.push({ type: 'goal', player: athlete, team: goalTeam, minute, og, penaltyKick: pk })
 
       if (participants.length > 1) {
         const assistName = participants[1]?.athlete?.displayName || ''
@@ -629,7 +638,7 @@ Deno.serve(async (req) => {
         // ── Build player_matches rows ─────────────────────────────────────
         // First, build per-player event data from keyEvents
         const playerEvents: Record<string, { // keyed by "team|espnPlayerName"
-          goals: Array<{ minute: string }>,
+          goals: Array<{ minute: string, type?: string }>,
           assists: Array<{ minute: string }>,
           yellowMinute: string | null,
           redMinute: string | null,
@@ -651,6 +660,7 @@ Deno.serve(async (req) => {
         for (const ev of matchData.events) {
           const pe = getPlayerEvents(ev.team, ev.player)
           if (ev.type === 'goal' && !ev.og) pe.goals.push({ minute: ev.minute })
+          else if (ev.type === 'goal' && ev.og) pe.goals.push({ minute: ev.minute, type: 'own goal' })
           else if (ev.type === 'assist') pe.assists.push({ minute: ev.minute })
           else if (ev.type === 'yellow') pe.yellowMinute = ev.minute
           else if (ev.type === 'red') pe.redMinute = ev.minute
@@ -715,7 +725,7 @@ Deno.serve(async (req) => {
             }
 
             // Aggregate stats for players table update
-            for (const _goal of pe.goals) addStat(pid, rp.name, team, 'goals')
+            for (const _goal of pe.goals) { if (!_goal.type) addStat(pid, rp.name, team, 'goals') }
             for (const _assist of pe.assists) addStat(pid, rp.name, team, 'assists')
             if (pe.yellowMinute) addStat(pid, rp.name, team, 'yellows')
             if (pe.redMinute) addStat(pid, rp.name, team, 'reds')
