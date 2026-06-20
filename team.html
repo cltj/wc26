@@ -96,7 +96,7 @@
 /* Roster table */
 .roster-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
 .roster { width:100%; border-collapse:collapse; font-size:12px; }
-.roster th { text-align:left; font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); padding:8px 6px; border-bottom:1px solid var(--border); white-space:nowrap; }
+.roster th { text-align:left; font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); padding:8px 6px; border-bottom:1px solid var(--border); white-space:nowrap; position:relative; }
 .roster th.num-col { text-align:center; width:32px; }
 .roster th.stat-col { text-align:center; width:40px; }
 .roster td { padding:8px 6px; border-bottom:1px solid rgba(255,255,255,.03); }
@@ -135,6 +135,12 @@
 .hc-cols { font-family:'JetBrains Mono',monospace; font-size:11px; min-width:24px; text-align:center; }
 .hc-header { font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; padding-bottom:2px; border-bottom:1px solid var(--border); margin-bottom:2px; }
 .hc-header .hc-rank, .hc-header .hc-name, .hc-header .hc-cols { font-family:'Inter',sans-serif; font-weight:600; }
+
+/* Help tooltip */
+.help-q { display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px; border-radius:50%; background:rgba(255,255,255,.1); color:var(--dim); font-size:8px; font-weight:700; cursor:pointer; vertical-align:middle; margin-left:2px; }
+.help-q:hover { background:rgba(255,255,255,.2); color:var(--gold); }
+.help-tip { display:none; position:absolute; background:var(--card); border:1px solid var(--gold); border-radius:6px; padding:6px 10px; font-size:10px; color:var(--text); white-space:nowrap; z-index:20; box-shadow:0 4px 12px rgba(0,0,0,.4); font-weight:400; text-transform:none; letter-spacing:0; margin-top:4px; }
+.help-tip.show { display:block; }
 
 .loading { color:var(--dim); font-size:13px; text-align:center; padding:40px; }
 .back-links { display:flex; gap:16px; margin-bottom:16px; }
@@ -198,7 +204,7 @@ function posGroup(pos) {
 function posRank(pos) {
   if (!pos) return 2;
   const p = pos.toUpperCase();
-  if (p.includes('G')) return 0;         // Goalkeeper
+  if (p === 'G' || p === 'GK') return 0;  // Goalkeeper
   if (p.match(/^(CD|CB|LB|RB|LWB|RWB)/)) return 1;  // Defenders
   if (p.match(/^(DM|CDM|CM)/)) return 2; // Defensive/central midfield
   if (p.match(/^(AM|CAM|LM|RM)/)) return 3; // Attacking mid / wide mid
@@ -504,6 +510,8 @@ async function loadTeam(name) {
         if (n.includes('rloth') || n.includes('sørloth')) return { ...p, position: 'RW' };
         // Ødegaard is AM (ESPN has him as RM)
         if (n.includes('degaard')) return { ...p, position: 'AM' };
+        // Ryerson is RB (ensure defense)
+        if (n.includes('ryerson')) return { ...p, position: 'RB' };
         return p;
       });
     }
@@ -549,7 +557,7 @@ async function loadTeam(name) {
       <th>Player</th>
       <th>Pos</th>
       <th class="stat-col">Age</th>
-      <th class="stat-col" title="Career international appearances">Int'l</th>
+      <th class="stat-col">Caps <span class="help-q" onclick="this.nextElementSibling.classList.toggle('show')">?</span><span class="help-tip">Career international appearances (all time, not just this tournament)</span></th>
       <th class="stat-col">G</th>
       <th class="stat-col">A</th>
       <th class="stat-col">Y</th>
