@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC 2026 – Team</title>
+<link rel="stylesheet" href="shared_styles.css">
+<style>
+.team-hero { display:flex; align-items:center; gap:16px; margin-bottom:24px; }
+.hero-flag { font-size:56px; line-height:1; }
+.hero-name { font-family:'Bebas Neue',sans-serif; font-size:36px; letter-spacing:1px; }
+.hero-meta { font-size:13px; color:var(--dim); margin-top:2px; }
+.hero-conf { font-size:11px; color:var(--dim); }
+
+.section-title { font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:.5px; color:var(--gold); margin-bottom:10px; margin-top:28px; }
+
+/* Stats bar */
+.team-stats-bar { display:grid; grid-template-columns:repeat(auto-fit,minmax(80px,1fr)); gap:1px; background:rgba(255,255,255,.06); border-radius:8px; overflow:hidden; margin-bottom:24px; }
+.ts-cell { background:var(--card); text-align:center; padding:12px 6px; }
+.ts-val { font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:700; }
+.ts-lbl { font-size:8px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
+
+/* Form */
+.form-row { display:flex; gap:4px; margin-bottom:8px; }
+.form-dot { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; }
+.form-w { background:rgba(96,185,122,.2); color:var(--green); }
+.form-d { background:rgba(240,180,41,.15); color:var(--gold); }
+.form-l { background:rgba(224,52,52,.15); color:#e07070; }
+.form-u { background:rgba(255,255,255,.05); color:var(--dim); }
+.form-detail { font-size:11px; color:var(--dim); line-height:1.8; }
+.form-score { font-family:'JetBrains Mono',monospace; font-weight:600; color:var(--text); }
+
+/* Lineup */
+.lineup-formation { font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700; color:var(--gold); margin-bottom:8px; }
+.lineup-note { font-size:10px; color:var(--dim); margin-bottom:10px; font-style:italic; }
+.lineup-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:6px; margin-bottom:24px; }
+.lineup-player { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:8px 10px; display:flex; align-items:center; gap:8px; }
+.lineup-player.gk { border-color:rgba(240,180,41,.25); }
+.lp-num { font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:var(--gold); min-width:22px; text-align:center; }
+.lp-name { font-size:12px; font-weight:600; }
+.lp-pos { font-size:9px; color:var(--dim); }
+
+/* Roster table */
+.roster-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.roster { width:100%; border-collapse:collapse; font-size:12px; }
+.roster th { text-align:left; font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); padding:8px 6px; border-bottom:1px solid var(--border); white-space:nowrap; }
+.roster th.num-col { text-align:center; width:32px; }
+.roster th.stat-col { text-align:center; width:40px; }
+.roster td { padding:8px 6px; border-bottom:1px solid rgba(255,255,255,.03); }
+.roster td.num-col { text-align:center; font-family:'JetBrains Mono',monospace; color:var(--gold); font-weight:600; }
+.roster td.stat-col { text-align:center; font-family:'JetBrains Mono',monospace; }
+.roster tr:hover { background:rgba(255,255,255,.02); }
+.roster .player-name { font-weight:600; }
+.roster .player-club { font-size:10px; color:var(--dim); margin-top:1px; }
+.roster .starter-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--gold); margin-right:4px; vertical-align:middle; }
+.roster .pos-badge { font-size:9px; padding:1px 5px; border-radius:3px; font-weight:600; }
+.pos-gk { background:rgba(240,180,41,.15); color:var(--gold); }
+.pos-df { background:rgba(59,130,246,.12); color:#7cb3f4; }
+.pos-mf { background:rgba(96,185,122,.12); color:var(--green); }
+.pos-fw { background:rgba(224,52,52,.12); color:#e07070; }
+.stat-highlight { color:var(--green); font-weight:700; }
+.stat-yellow { color:#f0b429; }
+.stat-red { color:#e07070; }
+
+/* WC ranking */
+.ranking-badge { display:inline-flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:8px 14px; font-size:13px; margin-right:10px; margin-bottom:8px; }
+.ranking-pos { font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--gold); }
+
+.loading { color:var(--dim); font-size:13px; text-align:center; padding:40px; }
+.back-link { font-size:12px; color:var(--dim); margin-bottom:16px; display:inline-block; }
+.back-link:hover { color:var(--gold); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div id="team-loading" class="loading">Loading team...</div>
+  <div id="team-content" style="display:none">
+    <a href="teams.html" class="back-link">&larr; All teams</a>
+    <div id="hero"></div>
+    <div id="stats-bar"></div>
+    <div id="wc-ranking"></div>
+    <div id="form-section"></div>
+    <div id="lineup-section"></div>
+    <div id="roster-section"></div>
+  </div>
+</div>
+
+<script src="shared_constants.js"></script>
+<script src="shared_nav.js"></script>
+<script>
+injectNav('teams');
+
+const params = new URLSearchParams(location.search);
+const teamName = params.get('team');
+
+if (!teamName) {
+  document.getElementById('team-loading').textContent = 'No team specified.';
+} else {
+  loadTeam(teamName);
+}
+
+function calcAge(dobStr) {
+  if (!dobStr) return null;
+  const parts = dobStr.split('/');
+  if (parts.length !== 3) return null;
+  const dob = new Date(+parts[2], +parts[0]-1, +parts[1]);
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  if (now.getMonth() < dob.getMonth() || (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+const POS_ORDER = { GK:0, DF:1, MF:2, FW:3 };
+function posGroup(pos) {
+  if (!pos) return 'MF';
+  if (pos === 'GK') return 'GK';
+  if (['DF','CB','LB','RB','LWB','RWB'].includes(pos)) return 'DF';
+  if (['FW','CF','LW','RW','ST','SS'].includes(pos)) return 'FW';
+  return 'MF';
+}
+
+async function loadTeam(name) {
+  const loading = document.getElementById('team-loading');
+  const content = document.getElementById('team-content');
+
+  try {
+    const [teams, players, schedule] = await Promise.all([
+      sb(`teams?select=*&name=eq.${encodeURIComponent(name)}`),
+      sb(`players?select=*&team_name=eq.${encodeURIComponent(name)}&order=shirt_number`),
+      sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id'),
+    ]);
+
+    if (!teams.length) { loading.textContent = `Team "${name}" not found.`; return; }
+    const team = teams[0];
+    const flag = FLAG_MAP[name] || team.flag_emoji || '';
+
+    document.title = `WC 2026 – ${name}`;
+
+    // Hero
+    document.getElementById('hero').innerHTML = `
+      <div class="team-hero">
+        <div class="hero-flag">${flag}</div>
+        <div>
+          <div class="hero-name">${name}</div>
+          <div class="hero-meta">Group ${team.group_letter}</div>
+          <div class="hero-conf">${team.confederation || ''}</div>
+        </div>
+      </div>`;
+
+    // Match data
+    const SCHED_ALIAS = {'South Korea':'Korea Republic','Bosnia & Herz.':'Bosnia and Herzegovina',
+      "Côte d'Ivoire":'Ivory Coast','IR Iran':'Iran','Cabo Verde':'Cape Verde',
+      'DR Congo':'Democratic Republic of the Congo','USA':'United States',
+      'Türkiye':'Turkey','Czechia':'Czech Republic'};
+    const aliases = [name, SCHED_ALIAS[name]].filter(Boolean).map(n => n.toLowerCase());
+    const matches = schedule.filter(m => {
+      if (m.status !== 'FT') return false;
+      return aliases.includes(m.home_team?.toLowerCase()) || aliases.includes(m.away_team?.toLowerCase());
+    });
+
+    let pld=0, w=0, d=0, l=0, gf=0, ga=0;
+    const results = [];
+    matches.forEach(m => {
+      const isHome = aliases.includes(m.home_team?.toLowerCase());
+      const hs = m.home_score, as = m.away_score;
+      const mGf = isHome?hs:as, mGa = isHome?as:hs;
+      pld++; gf += mGf; ga += mGa;
+      let res; if (mGf>mGa) { w++; res='W'; } else if (mGf<mGa) { l++; res='L'; } else { d++; res='D'; }
+      const opp = isHome ? m.away_team : m.home_team;
+      const oppFlag = FLAG_MAP[opp]||'';
+      results.push({ opp, oppFlag, gf:mGf, ga:mGa, res, isHome });
+    });
+
+    // Stats bar
+    document.getElementById('stats-bar').innerHTML = `
+      <div class="team-stats-bar">
+        <div class="ts-cell"><div class="ts-val">${pld}</div><div class="ts-lbl">Played</div></div>
+        <div class="ts-cell"><div class="ts-val" style="color:var(--green)">${w}</div><div class="ts-lbl">Won</div></div>
+        <div class="ts-cell"><div class="ts-val">${d}</div><div class="ts-lbl">Drawn</div></div>
+        <div class="ts-cell"><div class="ts-val" style="color:#e07070">${l}</div><div class="ts-lbl">Lost</div></div>
+        <div class="ts-cell"><div class="ts-val">${gf}</div><div class="ts-lbl">GF</div></div>
+        <div class="ts-cell"><div class="ts-val" style="color:${ga>0?'#e07070':'var(--dim)'}">${ga}</div><div class="ts-lbl">GA</div></div>
+        <div class="ts-cell"><div class="ts-val" style="color:${gf-ga>0?'var(--green)':gf-ga<0?'#e07070':'var(--dim)'}">${gf-ga>0?'+':''}${gf-ga}</div><div class="ts-lbl">GD</div></div>
+        <div class="ts-cell"><div class="ts-val" style="color:var(--gold)">${w*3+d}</div><div class="ts-lbl">Points</div></div>
+      </div>`;
+
+    // WC Ranking — compute all teams' points and goals to rank
+    const allTeams = await sb('teams?select=name&order=name');
+    const teamStats = {};
+    allTeams.forEach(t => { teamStats[t.name] = { pts:0, gf:0, name:t.name }; });
+    schedule.filter(m => m.status === 'FT').forEach(m => {
+      const mapName = n => {
+        const rev = {};
+        Object.entries(SCHED_ALIAS).forEach(([k,v]) => rev[v.toLowerCase()] = k);
+        return rev[n.toLowerCase()] || allTeams.find(t => t.name.toLowerCase() === n.toLowerCase())?.name || n;
+      };
+      const home = mapName(m.home_team), away = mapName(m.away_team);
+      if (!teamStats[home] || !teamStats[away]) return;
+      const hs = m.home_score, as = m.away_score;
+      teamStats[home].gf += hs; teamStats[away].gf += as;
+      if (hs > as) { teamStats[home].pts += 3; }
+      else if (hs < as) { teamStats[away].pts += 3; }
+      else { teamStats[home].pts += 1; teamStats[away].pts += 1; }
+    });
+    const ranked = Object.values(teamStats).sort((a,b) => b.pts - a.pts || b.gf - a.gf);
+    const myRankPts = ranked.findIndex(t => t.name === name) + 1;
+    const goalRanked = [...ranked].sort((a,b) => b.gf - a.gf);
+    const myRankGf = goalRanked.findIndex(t => t.name === name) + 1;
+
+    document.getElementById('wc-ranking').innerHTML = `
+      <div class="section-title">Tournament Ranking</div>
+      <div>
+        <span class="ranking-badge"><span class="ranking-pos">#${myRankPts}</span> by points (${w*3+d} pts)</span>
+        <span class="ranking-badge"><span class="ranking-pos">#${myRankGf}</span> by goals scored (${gf})</span>
+      </div>`;
+
+    // Form + results
+    const form = results.slice(-5);
+    const formDots = Array(5).fill(null).map((_,i) => {
+      const r = form[i]?.res || 'U';
+      return `<div class="form-dot form-${r.toLowerCase()}">${r}</div>`;
+    }).join('');
+    const resultsHtml = results.map(r =>
+      `<div>${r.isHome?'vs':'@'} ${r.oppFlag} ${r.opp} <span class="form-score">${r.gf}-${r.ga}</span></div>`
+    ).join('');
+
+    document.getElementById('form-section').innerHTML = `
+      <div class="section-title">Form</div>
+      <div class="form-row">${formDots}</div>
+      ${resultsHtml ? `<div class="form-detail">${resultsHtml}</div>` : '<div class="form-detail">No matches played yet</div>'}`;
+
+    // Lineup
+    const xi = team.last_starting_xi || [];
+    const formation = team.last_formation || '';
+    let lineupHtml = '';
+    if (xi.length) {
+      lineupHtml = `
+        <div class="section-title">Last Starting XI</div>
+        <div class="lineup-note">Formation used in the most recent match</div>
+        <div class="lineup-formation">${formation}</div>
+        <div class="lineup-grid">${xi.map(p => {
+          const isGk = (p.position||'').includes('G');
+          return `<div class="lineup-player${isGk?' gk':''}">
+            <div class="lp-num">${p.number}</div>
+            <div><div class="lp-name">${p.short||p.name}</div><div class="lp-pos">${p.position}</div></div>
+          </div>`;
+        }).join('')}</div>`;
+    }
+    document.getElementById('lineup-section').innerHTML = lineupHtml;
+
+    // Roster — mark starters
+    const starterNames = new Set(xi.map(p => (p.name||'').toLowerCase()));
+    players.sort((a,b) => (POS_ORDER[posGroup(a.position)]??2) - (POS_ORDER[posGroup(b.position)]??2) || (a.shirt_number||99) - (b.shirt_number||99));
+
+    const rosterRows = players.map(p => {
+      const pg = posGroup(p.position);
+      const age = calcAge(p.dob);
+      const isStarter = starterNames.has(p.name?.toLowerCase()) ||
+        starterNames.has(`${p.first_name} ${p.last_name}`.toLowerCase());
+      return `<tr>
+        <td class="num-col">${p.shirt_number||''}</td>
+        <td>${isStarter?'<span class="starter-dot" title="Started last match"></span>':''}<span class="player-name">${p.name_on_shirt || p.last_name || p.name}</span>
+          <div class="player-club">${p.club||''}</div></td>
+        <td><span class="pos-badge pos-${pg.toLowerCase()}">${p.position||'—'}</span></td>
+        <td class="stat-col">${age !== null ? age : '—'}</td>
+        <td class="stat-col">${p.caps||'—'}</td>
+        <td class="stat-col ${p.goals?'stat-highlight':''}">${p.goals||0}</td>
+        <td class="stat-col ${p.assists?'stat-highlight':''}">${p.assists||0}</td>
+        <td class="stat-col ${p.yellow_cards?'stat-yellow':''}">${p.yellow_cards||0}</td>
+        <td class="stat-col ${p.red_cards?'stat-red':''}">${p.red_cards||0}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('roster-section').innerHTML = `
+      <div class="section-title">Full Squad (${players.length} players)</div>
+      <div class="roster-wrap">
+        <table class="roster">
+          <thead><tr>
+            <th class="num-col">#</th>
+            <th>Player</th>
+            <th>Pos</th>
+            <th class="stat-col">Age</th>
+            <th class="stat-col">Caps</th>
+            <th class="stat-col">G</th>
+            <th class="stat-col">A</th>
+            <th class="stat-col">Y</th>
+            <th class="stat-col">R</th>
+          </tr></thead>
+          <tbody>${rosterRows}</tbody>
+        </table>
+      </div>`;
+
+    loading.style.display = 'none';
+    content.style.display = 'block';
+  } catch(e) {
+    loading.textContent = 'Error loading team: ' + e.message;
+  }
+}
+</script>
+</body>
+</html>

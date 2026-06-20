@@ -8,7 +8,8 @@
 <style>
 .filter-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
 .teams-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }
-.team-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:transform .15s; }
+.team-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden; transition:transform .15s; }
+.team-card a { text-decoration:none; color:inherit; display:block; cursor:pointer; }
 .team-card:hover { transform:translateY(-2px); }
 .team-card.norway { border-color:rgba(239,43,45,.4); }
 .team-hdr { display:flex; align-items:center; gap:12px; padding:14px; }
@@ -163,6 +164,7 @@ function renderTeams() {
     ).join('');
 
     return `<div class="team-card${isNor?' norway':''}">
+      <a href="team.html?team=${encodeURIComponent(t.name)}">
       <div class="team-hdr">
         <div class="team-flag">${flag}</div>
         <div class="team-info">
@@ -185,6 +187,7 @@ function renderTeams() {
           <div class="stat-lbl">Goals against</div>
         </div>
       </div>
+      </a>
     </div>`;
   }).join('');
 }

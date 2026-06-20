@@ -101,18 +101,11 @@
 .mu-lineup { margin-top:6px; border-top:1px solid var(--border); padding-top:6px; }
 .mu-lineup-hdr { font-size:8px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); margin-bottom:4px; }
 .mu-formation { font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--gold); font-size:9px; }
-.mu-player { font-size:9px; color:var(--text); line-height:1.5; cursor:pointer; position:relative; }
-.mu-player:hover { color:var(--gold); }
+.mu-player { font-size:9px; color:var(--text); line-height:1.5; }
 .mu-jersey { font-family:'JetBrains Mono',monospace; color:var(--dim); font-size:8px; display:inline-block; width:20px; text-align:right; margin-right:4px; }
 .mu-pos { font-size:7px; color:var(--dim); }
-.mu-player-tip { position:absolute; left:0; bottom:100%; background:var(--card); border:1px solid var(--gold); border-radius:6px; padding:6px 10px; font-size:10px; color:var(--text); white-space:nowrap; z-index:20; box-shadow:0 4px 12px rgba(0,0,0,.4); pointer-events:none; }
-.mu-player-tip .pt-name { font-weight:700; margin-bottom:2px; }
-.mu-player-tip .pt-club { color:var(--dim); font-size:9px; }
-.mu-player-tip .pt-stats { display:flex; gap:8px; margin-top:3px; font-family:'JetBrains Mono',monospace; font-size:9px; }
-.mu-player-tip .pt-g { color:var(--green); }
-.mu-player-tip .pt-a { color:var(--gold); }
-.mu-player-tip .pt-y { color:#f0b429; }
-.mu-player-tip .pt-r { color:#e07070; }
+.mu-more { display:inline-block; font-size:9px; color:var(--gold); text-decoration:none; margin-top:4px; }
+.mu-more:hover { text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -327,7 +320,8 @@ function teamSideHtml(name) {
       <div class="mu-stat"><div class="mu-stat-val" style="color:${ga>0?'#e07070':'var(--dim)'}">${ga}</div><div class="mu-stat-lbl">GA</div></div>
     </div>
     ${matchesHtml ? `<div class="mu-matches">${matchesHtml}</div>` : ''}
-    ${t.last_formation ? `<div class="mu-lineup"><div class="mu-lineup-hdr">Last lineup <span class="mu-formation">${t.last_formation}</span></div>${(t.last_starting_xi||[]).map(p => `<div class="mu-player" onclick="showPlayerTip(this,'${(p.name||'').replace(/'/g,"\\'")}','${canonical.replace(/'/g,"\\'")}')"><span class="mu-jersey">${p.number}</span>${p.short||p.name} <span class="mu-pos">${p.position}</span></div>`).join('')}</div>` : ''}
+    ${t.last_formation ? `<div class="mu-lineup"><div class="mu-lineup-hdr">Last lineup <span class="mu-formation">${t.last_formation}</span></div>${(t.last_starting_xi||[]).map(p => `<div class="mu-player"><span class="mu-jersey">${p.number}</span>${p.short||p.name} <span class="mu-pos">${p.position}</span></div>`).join('')}</div>` : ''}
+    <a class="mu-more" href="team.html?team=${encodeURIComponent(canonical)}" onclick="event.stopPropagation()">View full squad &rarr;</a>
   </div>`;
 }
 
@@ -390,56 +384,6 @@ function showTeamPopup(name, ev) {
 
 function closeTeamPopup() {
   document.getElementById('team-popup-overlay').classList.remove('open');
-}
-
-// ── Player tip (click on lineup player) ───────────────────────────────────────
-let playerCache = null;
-async function loadPlayerCache() {
-  if (playerCache) return playerCache;
-  const rows = [];
-  let offset = 0;
-  while (true) {
-    const batch = await sb(`players?select=name,team_name,club,position,goals,assists,yellow_cards,red_cards&order=name&offset=${offset}&limit=500`);
-    rows.push(...batch);
-    if (batch.length < 500) break;
-    offset += 500;
-  }
-  playerCache = rows;
-  return rows;
-}
-
-async function showPlayerTip(el, fullName, teamName) {
-  // Remove any existing tip
-  document.querySelectorAll('.mu-player-tip').forEach(t => t.remove());
-
-  const players = await loadPlayerCache();
-  // Match by last name + team
-  const lastName = fullName.split(' ').pop().toLowerCase();
-  const found = players.find(p =>
-    p.team_name === teamName && p.name.toLowerCase().includes(lastName)
-  ) || players.find(p =>
-    p.name.toLowerCase().includes(lastName)
-  );
-
-  const tip = document.createElement('div');
-  tip.className = 'mu-player-tip';
-  if (found) {
-    const stats = [];
-    if (found.goals) stats.push(`<span class="pt-g">${found.goals}G</span>`);
-    if (found.assists) stats.push(`<span class="pt-a">${found.assists}A</span>`);
-    if (found.yellow_cards) stats.push(`<span class="pt-y">${found.yellow_cards}Y</span>`);
-    if (found.red_cards) stats.push(`<span class="pt-r">${found.red_cards}R</span>`);
-    tip.innerHTML = `<div class="pt-name">${found.name}</div><div class="pt-club">${found.club||''} · ${found.position||''}</div>${stats.length ? `<div class="pt-stats">${stats.join('')}</div>` : ''}`;
-  } else {
-    tip.innerHTML = `<div class="pt-name">${fullName}</div><div class="pt-club">No data</div>`;
-  }
-  el.appendChild(tip);
-
-  // Dismiss on next click anywhere
-  setTimeout(() => {
-    const dismiss = () => { tip.remove(); document.removeEventListener('click', dismiss); };
-    document.addEventListener('click', dismiss);
-  }, 0);
 }
 
 function toggleWinnerPick(gameId) {
