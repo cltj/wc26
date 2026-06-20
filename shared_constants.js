@@ -87,42 +87,75 @@ function isValidScore(s) {
   return !isNaN(a) && !isNaN(b) && Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b >= 0;
 }
 
-function calcPts(result, pred) {
-  if (!result) return null;
-  if (!pred || !isValidScore(pred)) return null;
-  if (result.trim() === pred.trim()) return 3;
-  try {
-    const [rh,ra] = result.trim().split('-').map(Number);
-    const [ph,pa] = pred.trim().split('-').map(Number);
-    const sign = x => x>0?1:x<0?-1:0;
-    if (sign(rh-ra) === sign(ph-pa)) return 1;
-  } catch(e) {}
-  return 0;
+function isKnockout(game) {
+  return game.round && game.round !== 'group';
 }
 
-function predStatus(result, pred) {
+function isDraw(score) {
+  if (!score || !isValidScore(score)) return false;
+  const [a, b] = score.trim().split('-').map(Number);
+  return a === b;
+}
+
+// Calculate points for a prediction
+// game: {result, round, advancer}  pred: {prediction, winner}
+function calcPts(game, pred) {
+  const result = game.result;
+  const prediction = typeof pred === 'string' ? pred : pred?.prediction;
+  if (!result || !prediction || !isValidScore(prediction)) return null;
+
+  let pts = 0;
+  if (result.trim() === prediction.trim()) pts = 3;
+  else {
+    const [rh,ra] = result.trim().split('-').map(Number);
+    const [ph,pa] = prediction.trim().split('-').map(Number);
+    const sign = x => x>0?1:x<0?-1:0;
+    if (sign(rh-ra) === sign(ph-pa)) pts = 1;
+  }
+
+  // Knockout bonus: +1 for correctly picking the advancing team on a draw
+  if (isKnockout(game) && isDraw(result) && isDraw(prediction) && game.advancer) {
+    const pickedWinner = typeof pred === 'object' ? pred?.winner : null;
+    if (pickedWinner && pickedWinner === game.advancer) pts += 1;
+  }
+
+  return pts;
+}
+
+function predStatus(game, pred) {
+  const result = game.result || (typeof game === 'string' ? game : null);
+  const prediction = typeof pred === 'string' ? pred : pred?.prediction;
   if (!result) return 'pending';
-  if (!pred || !isValidScore(pred)) return 'missed';
-  const pts = calcPts(result, pred);
-  return pts===3?'exact':pts===1?'winner':'wrong';
+  if (!prediction || !isValidScore(prediction)) return 'missed';
+  // Use simple version for status label
+  if (result.trim() === prediction.trim()) return 'exact';
+  const [rh,ra] = result.trim().split('-').map(Number);
+  const [ph,pa] = prediction.trim().split('-').map(Number);
+  const sign = x => x>0?1:x<0?-1:0;
+  if (sign(rh-ra) === sign(ph-pa)) return 'winner';
+  return 'wrong';
 }
 
 function buildLeaderboard(games, predictions) {
   const totals = {};
-  CONTENDERS.forEach(n => totals[n] = {pts:0,exact:0,winner:0,wrong:0,missed:0,played:0});
+  CONTENDERS.forEach(n => totals[n] = {pts:0,exact:0,winner:0,wrong:0,missed:0,played:0,bonus:0});
   games.forEach(g => {
     if (!g.result) return;
     CONTENDERS.forEach(n => {
       const p = predictions.find(p => p.game_id===g.id && p.participant===n);
-      const status = predStatus(g.result, p?.prediction);
+      const status = predStatus(g, p?.prediction);
       if (status==='missed') { totals[n].missed++; }
       else if (status!=='pending') {
-        const pts = calcPts(g.result, p?.prediction);
+        const pts = calcPts(g, p);
         totals[n].pts += pts;
         totals[n].played++;
         if (status==='exact') totals[n].exact++;
         else if (status==='winner') totals[n].winner++;
         else totals[n].wrong++;
+        // Track knockout winner bonus
+        if (isKnockout(g) && isDraw(g.result) && isDraw(p?.prediction) && g.advancer && p?.winner === g.advancer) {
+          totals[n].bonus++;
+        }
       }
     });
   });

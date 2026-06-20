@@ -46,12 +46,18 @@
       <div class="admin-box">
         <div class="admin-label">Enter Game Result</div>
         <div class="admin-row">
-          <select class="inp" id="game-sel" style="flex:2;min-width:200px"></select>
-          <input class="inp" id="result-inp" placeholder="e.g. 2-1" maxlength="6" style="width:90px">
+          <select class="inp" id="game-sel" style="flex:2;min-width:200px" onchange="onGameSelChange()"></select>
+          <input class="inp" id="result-inp" placeholder="e.g. 2-1" maxlength="6" style="width:90px" oninput="onResultInput()">
           <button class="btn btn-gold" onclick="saveResult()">Save Result</button>
           <span id="result-msg" style="font-size:12px;color:var(--green)"></span>
         </div>
-        <div class="admin-note">Results auto-calculate everyone's points on the leaderboard.</div>
+        <div class="admin-row" id="advancer-row" style="display:none">
+          <label style="font-size:12px;color:var(--dim)">Who advanced?</label>
+          <select class="inp" id="advancer-sel" style="font-size:12px;padding:6px 8px">
+            <option value="">Pick…</option>
+          </select>
+        </div>
+        <div class="admin-note">Results auto-calculate everyone's points on the leaderboard. For knockout draws, also set who advanced.</div>
       </div>
 
       <!-- Auto sync -->
@@ -114,9 +120,30 @@ let allGames = [];
 async function loadGames() {
   allGames = await sb('games?select=*&order=id');
   const sel = document.getElementById('game-sel');
+  const rl = {group:'GRP',R32:'R32',R16:'R16',QF:'QF',SF:'SF','3rd':'3RD',F:'FIN'};
   sel.innerHTML = allGames.map(g =>
-    `<option value="${g.id}">#${g.id} ${g.home} vs ${g.away}${g.result?' ('+g.result+')':''}</option>`
+    `<option value="${g.id}">#${g.id} [${rl[g.round]||g.round}] ${g.home} vs ${g.away}${g.result?' ('+g.result+')':''}</option>`
   ).join('');
+}
+
+function onGameSelChange() {
+  onResultInput();
+}
+
+function onResultInput() {
+  const gameId = parseInt(document.getElementById('game-sel').value);
+  const result = document.getElementById('result-inp').value.trim();
+  const game = allGames.find(g => g.id === gameId);
+  const row = document.getElementById('advancer-row');
+  const sel = document.getElementById('advancer-sel');
+
+  if (game && isKnockout(game) && isDraw(result)) {
+    sel.innerHTML = `<option value="">Pick…</option><option value="${game.home}">${game.home}</option><option value="${game.away}">${game.away}</option>`;
+    if (game.advancer) sel.value = game.advancer;
+    row.style.display = 'flex';
+  } else {
+    row.style.display = 'none';
+  }
 }
 
 async function saveResult() {
@@ -124,8 +151,15 @@ async function saveResult() {
   const result = document.getElementById('result-inp').value.trim();
   const msg    = document.getElementById('result-msg');
   if (!result) return;
+
+  const game = allGames.find(g => g.id === gameId);
+  const payload = { result };
+  if (isKnockout(game) && isDraw(result)) {
+    payload.advancer = document.getElementById('advancer-sel').value || null;
+  }
+
   try {
-    await sbAdmin(`games?id=eq.${gameId}`, { method:'PATCH', body: JSON.stringify({result}) });
+    await sbAdmin(`games?id=eq.${gameId}`, { method:'PATCH', body: JSON.stringify(payload) });
     msg.textContent = '✓ Saved';
     setTimeout(() => { msg.textContent=''; loadGames(); }, 2000);
   } catch(e) { msg.textContent='Error: '+e.message; msg.style.color='var(--red)'; }

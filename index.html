@@ -55,6 +55,8 @@
 .locked-msg { font-size: 11px; color: #e07070; font-style: italic; }
 .toggle-arrow { font-size: 9px; color: var(--dim); transition: transform .2s; margin-left: 3px; }
 .game-card.open .toggle-arrow { transform: rotate(180deg); }
+.round-sep { font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:1px; color:var(--gold); padding:24px 0 8px; border-bottom:1px solid rgba(255,255,255,0.06); margin-bottom:10px; }
+.game-card.knockout { border-left:3px solid rgba(240,180,41,0.3); }
 </style>
 </head>
 <body>
@@ -82,6 +84,7 @@
 injectNav('index');
 const rankLabel = ['🥇 1st','🥈 2nd','🥉 3rd','4th','5th','6th'];
 const rankClass = ['rank-1','rank-2','rank-3','rank-4','rank-5','rank-6'];
+const ROUND_LABELS = {group:'Group',R32:'Round of 32',R16:'Round of 16',QF:'Quarter-final',SF:'Semi-final','3rd':'3rd Place',F:'Final'};
 let allGames = [], allPredictions = [];
 
 async function load() {
@@ -107,6 +110,7 @@ function renderLB() {
         <div class="lb-chips">
           ${s.exact  ? `<span class="chip chip-exact">${s.exact}× exact</span>`  : ''}
           ${s.winner ? `<span class="chip chip-win">${s.winner}× winner</span>`  : ''}
+          ${s.bonus  ? `<span class="chip chip-win">${s.bonus}× ⚔ bonus</span>` : ''}
           ${s.wrong  ? `<span class="chip chip-wrong">${s.wrong}× miss</span>`   : ''}
           ${s.missed ? `<span class="chip chip-missed">${s.missed}× skipped</span>` : ''}
           <span class="chip chip-played">${s.played} played</span>
@@ -115,49 +119,84 @@ function renderLB() {
     </div>`).join('');
 }
 
-function badgeHtml(result, pred) {
-  const st = predStatus(result, pred);
+function badgeHtml(game, pred) {
+  const st = predStatus(game, pred?.prediction || pred);
   if (st==='pending') return '';
   if (st==='missed')  return `<span class="badge badge-m">— missed</span>`;
-  if (st==='exact')   return `<span class="badge badge-3">⚽ 3 pts</span>`;
-  if (st==='winner')  return `<span class="badge badge-1">✓ 1 pt</span>`;
+  const pts = calcPts(game, pred);
+  if (st==='exact')   return `<span class="badge badge-3">⚽ ${pts} pts</span>`;
+  if (st==='winner')  return `<span class="badge badge-1">✓ ${pts} pt${pts!==1?'s':''}</span>`;
   return `<span class="badge badge-0">✗ 0 pts</span>`;
 }
 
 function renderGames() {
   const user = getUser();
+  // Group games by round
+  const roundOrder = ['group','R32','R16','QF','SF','3rd','F'];
+  let currentRound = '';
+
   document.getElementById('games-list').innerHTML = allGames.map(g => {
     const locked = new Date() >= new Date(g.kickoff);
+    const ko = isKnockout(g);
     const norway = [g.home,g.away].some(t => t.toLowerCase()==='norway' || t.toLowerCase()==='iraq');
     const kickoff = new Date(g.kickoff);
     const dateStr = kickoff.toLocaleDateString('no-NO',{day:'numeric',month:'short'});
     const timeStr = kickoff.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'});
-    const homeL = g.home + (g.home.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
-    const awayL = g.away + (g.away.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
+    const homeFlag = FLAG_MAP[g.home] ? FLAG_MAP[g.home]+' ' : '';
+    const awayFlag = FLAG_MAP[g.away] ? FLAG_MAP[g.away]+' ' : '';
+    const homeL = homeFlag + g.home + (g.home.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
+    const awayL = awayFlag + g.away + (g.away.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
+    const isSlot = g.home_slot && g.home === g.home_slot; // teams not yet resolved
 
     const predsHtml = CONTENDERS.map(name => {
       const p = allPredictions.find(p => p.game_id===g.id && p.participant===name);
+      let winnerBadge = '';
+      if (ko && p?.prediction && isDraw(p.prediction) && p.winner) {
+        winnerBadge = `<div style="font-size:9px;color:var(--dim);margin-top:2px">⚔ ${p.winner}</div>`;
+      }
       return `<div class="pred-cell">
         <div class="pred-name">${name}</div>
         <div class="pred-score ${p?.prediction?'':'empty'}">${p?.prediction||'—'}</div>
-        ${g.result ? badgeHtml(g.result, p?.prediction) : (p&&isValidScore(p.prediction)?'<span class="badge badge-t">Tipped ✓</span>':'')}
+        ${winnerBadge}
+        ${g.result ? badgeHtml(g, p) : (p&&isValidScore(p.prediction)?'<span class="badge badge-t">Tipped ✓</span>':'')}
       </div>`;
     }).join('');
 
     let inputHtml = '';
-    if (user) {
+    if (user && !isSlot) {
       const myP = allPredictions.find(p => p.game_id===g.id && p.participant===user);
-      inputHtml = locked
-        ? `<div class="pred-inp-row"><span class="locked-msg">🔒 Locked — game has started</span></div>`
-        : `<div class="pred-inp-row">
+      if (locked) {
+        inputHtml = `<div class="pred-inp-row"><span class="locked-msg">🔒 Locked — game has started</span></div>`;
+      } else {
+        const myVal = myP?.prediction || '';
+        const showWinner = ko && isDraw(myVal);
+        inputHtml = `<div class="pred-inp-row">
             <label>Your tip:</label>
-            <input class="inp pred-inp" id="inp-${g.id}" placeholder="e.g. 2-1" maxlength="6" value="${myP?.prediction||''}">
+            <input class="inp pred-inp" id="inp-${g.id}" placeholder="e.g. 2-1" maxlength="6" value="${myVal}" oninput="toggleWinnerPick(${g.id})">
             <button class="btn btn-gold" style="padding:7px 14px;font-size:12px" onclick="savePred(${g.id})">Save</button>
             <span class="save-msg" id="msg-${g.id}" style="color:var(--green)">Saved ✓</span>
-          </div>`;
+          </div>
+          ${ko ? `<div class="pred-inp-row" id="winner-row-${g.id}" style="display:${showWinner?'flex':'none'}">
+            <label>Who advances?</label>
+            <select class="inp" id="winner-${g.id}" style="font-size:12px;padding:6px 8px">
+              <option value="">Pick…</option>
+              <option value="${g.home}"${myP?.winner===g.home?' selected':''}>${homeFlag}${g.home}</option>
+              <option value="${g.away}"${myP?.winner===g.away?' selected':''}>${awayFlag}${g.away}</option>
+            </select>
+          </div>` : ''}`;
+      }
+    } else if (isSlot) {
+      inputHtml = `<div class="pred-inp-row"><span class="locked-msg" style="color:var(--dim)">⏳ Teams not yet determined</span></div>`;
     }
 
-    return `<div class="game-card${norway?' norway':''}" id="gc-${g.id}">
+    // Round separator
+    let separator = '';
+    if (g.round !== currentRound) {
+      currentRound = g.round;
+      separator = `<div class="round-sep">${ROUND_LABELS[g.round] || g.round}</div>`;
+    }
+
+    return `${separator}<div class="game-card${norway?' norway':''}${ko?' knockout':''}" id="gc-${g.id}">
       <div class="game-hdr" onclick="toggleGame(${g.id})">
         <div class="g-num">${g.id}</div>
         <div class="g-team home">${homeL}</div>
@@ -173,6 +212,14 @@ function renderGames() {
   }).join('');
 }
 
+function toggleWinnerPick(gameId) {
+  const inp = document.getElementById(`inp-${gameId}`);
+  const row = document.getElementById(`winner-row-${gameId}`);
+  if (!row) return;
+  const val = inp.value.trim();
+  row.style.display = isDraw(val) ? 'flex' : 'none';
+}
+
 function toggleGame(id) {
   document.getElementById(`pp-${id}`)?.classList.toggle('open');
   document.getElementById(`gc-${id}`)?.classList.toggle('open');
@@ -184,15 +231,22 @@ async function savePred(gameId) {
   const pred = inp.value.trim();
   const user = getUser();
   if (!pred || !user) return;
+
+  const game = allGames.find(g => g.id === gameId);
+  const winnerEl = document.getElementById(`winner-${gameId}`);
+  const winner = (isKnockout(game) && isDraw(pred) && winnerEl) ? winnerEl.value || null : null;
+
   inp.disabled = true;
   try {
+    const payload = { prediction: pred, winner };
     const existing = allPredictions.find(p => p.game_id===gameId && p.participant===user);
     if (existing) {
-      await sb(`predictions?game_id=eq.${gameId}&participant=eq.${encodeURIComponent(user)}`, { method:'PATCH', body: JSON.stringify({prediction:pred}) });
+      await sb(`predictions?game_id=eq.${gameId}&participant=eq.${encodeURIComponent(user)}`, { method:'PATCH', body: JSON.stringify(payload) });
       existing.prediction = pred;
+      existing.winner = winner;
     } else {
-      await sb('predictions', { method:'POST', body: JSON.stringify({game_id:gameId, participant:user, prediction:pred}) });
-      allPredictions.push({game_id:gameId, participant:user, prediction:pred});
+      await sb('predictions', { method:'POST', body: JSON.stringify({game_id:gameId, participant:user, ...payload}) });
+      allPredictions.push({game_id:gameId, participant:user, prediction:pred, winner});
     }
     msg.classList.add('show');
     setTimeout(() => msg.classList.remove('show'), 2500);

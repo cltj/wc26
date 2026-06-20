@@ -172,6 +172,88 @@ async function espnMatchStats(eventId: string): Promise<{
   return result
 }
 
+// Map schedule team names → canonical names (same as shared_standings.js SCHED_TO_TEAM)
+const SCHED_TO_TEAM: Record<string, string> = {
+  'Korea Republic': 'South Korea',
+  'Bosnia and Herzegovina': 'Bosnia & Herz.',
+  'Ivory Coast': "Côte d'Ivoire",
+  'Iran': 'IR Iran',
+  'Cape Verde': 'Cabo Verde',
+  'Democratic Republic of the Congo': 'DR Congo',
+  'Congo DR': 'DR Congo',
+  'United States': 'USA',
+  'Turkey': 'Türkiye',
+  'Czech Republic': 'Czechia',
+}
+
+function normalizeScheduleTeam(name: string): string {
+  return SCHED_TO_TEAM[name] || name
+}
+
+// Compute group standings from teams + schedule, then resolve an R32 slot label
+function resolveR32Slot(
+  label: string,
+  teams: Array<{ name: string, group_letter: string }>,
+  schedule: Array<{ home_team: string, away_team: string, home_score: number | null, away_score: number | null, status: string, group_name: string | null }>
+): string | null {
+  // Build standings
+  const stats: Record<string, { name: string, group: string, pld: number, w: number, d: number, l: number, gf: number, ga: number, pts: number }> = {}
+  teams.forEach(t => {
+    stats[t.name] = { name: t.name, group: t.group_letter, pld: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 }
+  })
+
+  schedule.forEach(m => {
+    if (m.status !== 'FT' || !m.group_name) return
+    const home = normalizeScheduleTeam(m.home_team)
+    const away = normalizeScheduleTeam(m.away_team)
+    const hs = m.home_score ?? 0, as = m.away_score ?? 0
+    if (!stats[home] || !stats[away]) return
+    stats[home].pld++; stats[away].pld++
+    stats[home].gf += hs; stats[home].ga += as
+    stats[away].gf += as; stats[away].ga += hs
+    if (hs > as) { stats[home].w++; stats[home].pts += 3; stats[away].l++ }
+    else if (hs < as) { stats[away].w++; stats[away].pts += 3; stats[home].l++ }
+    else { stats[home].d++; stats[home].pts += 1; stats[away].d++; stats[away].pts += 1 }
+  })
+
+  const groups: Record<string, typeof stats[string][]> = {}
+  Object.values(stats).forEach(t => {
+    if (!groups[t.group]) groups[t.group] = []
+    groups[t.group].push(t)
+  })
+  const sortTeams = (arr: typeof stats[string][]) => arr.sort((a, b) =>
+    (b.pts - a.pts) || ((b.gf - b.ga) - (a.gf - a.ga)) || (b.gf - a.gf)
+  )
+  Object.keys(groups).forEach(g => sortTeams(groups[g]))
+
+  // Resolve 1st/2nd
+  const m1 = label.match(/^(1st|2nd)\s+([A-L])$/)
+  if (m1) {
+    const pos = m1[1] === '1st' ? 0 : 1
+    const grp = groups[m1[2]]
+    if (!grp || grp.length < 2 || grp[0].pld === 0) return null
+    return grp[pos].name
+  }
+
+  // Resolve 3rd place
+  const m3 = label.match(/^3rd\s+(.+)$/)
+  if (m3) {
+    const possibleGroups = m3[1].split('/')
+    // Get all 3rd-place teams and find top 8
+    const thirds: Array<typeof stats[string] & { fromGroup: string }> = []
+    Object.entries(groups).forEach(([letter, t]) => {
+      if (t.length >= 3) thirds.push({ ...t[2], fromGroup: letter })
+    })
+    thirds.sort((a, b) => (b.pts - a.pts) || ((b.gf - b.ga) - (a.gf - a.ga)) || (b.gf - a.gf))
+    const qualifying = new Set(thirds.slice(0, 8).map(t => t.fromGroup))
+    const matching = possibleGroups.filter(g => qualifying.has(g))
+    if (matching.length === 1) return groups[matching[0]][2]?.name || null
+    return null
+  }
+
+  return null
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -444,7 +526,76 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Step 7: Save sync state ─────────────────────────────────────────
+    // ── Step 7: Resolve knockout slots ──────────────────────────────────
+    // Fetch all knockout prediction games and resolve placeholder team names
+    const { data: koGames } = await supabase
+      .from('games')
+      .select('id,home,away,home_slot,away_slot,round,result')
+      .neq('round', 'group')
+      .order('id')
+
+    if (koGames) {
+      // Build lookup of game results for winner resolution
+      const { data: allPredGames } = await supabase.from('games').select('id,home,away,result,round,advancer').order('id')
+      const gameById: Record<number, any> = {}
+      if (allPredGames) allPredGames.forEach(g => gameById[g.id] = g)
+
+      // Also get group standings for R32 resolution
+      const { data: teams } = await supabase.from('teams').select('name,group_letter').order('group_letter,name')
+      const { data: sched } = await supabase.from('schedule').select('home_team,away_team,home_score,away_score,status,group_name').order('id')
+
+      let slotUpdates = 0
+      for (const g of koGames) {
+        if (!g.home_slot) continue
+        let newHome = g.home, newAway = g.away
+
+        if (g.round === 'R32' && teams && sched) {
+          // Resolve from group standings
+          const resolved = resolveR32Slot(g.home_slot, teams, sched)
+          if (resolved && resolved !== g.home) newHome = resolved
+          const resolved2 = resolveR32Slot(g.away_slot, teams, sched)
+          if (resolved2 && resolved2 !== g.away) newAway = resolved2
+        } else {
+          // Resolve from previous round winners: W17 → winner of game 17
+          const resolveWL = (slot: string) => {
+            const mw = slot.match(/^W(\d+)$/)
+            if (mw) {
+              const prev = gameById[Number(mw[1])]
+              if (!prev?.result) return null
+              // If draw after 90 min, use advancer field
+              const [h, a] = prev.result.split('-').map(Number)
+              if (h === a) return prev.advancer || null
+              return h > a ? prev.home : prev.away
+            }
+            const ml = slot.match(/^L(\d+)$/)
+            if (ml) {
+              const prev = gameById[Number(ml[1])]
+              if (!prev?.result) return null
+              const [h, a] = prev.result.split('-').map(Number)
+              if (h === a) {
+                if (!prev.advancer) return null
+                return prev.advancer === prev.home ? prev.away : prev.home
+              }
+              return h > a ? prev.away : prev.home
+            }
+            return null
+          }
+          const rh = resolveWL(g.home_slot)
+          if (rh && rh !== g.home) newHome = rh
+          const ra = resolveWL(g.away_slot)
+          if (ra && ra !== g.away) newAway = ra
+        }
+
+        if (newHome !== g.home || newAway !== g.away) {
+          await supabase.from('games').update({ home: newHome, away: newAway }).eq('id', g.id)
+          slotUpdates++
+          l(`  Slot resolved: Game ${g.id} → ${newHome} vs ${newAway}`)
+        }
+      }
+      if (slotUpdates) l(`✓ ${slotUpdates} knockout slots resolved`)
+    }
+
+    // ── Step 8: Save sync state ─────────────────────────────────────────
     await supabase.from('sync_state').upsert({
       key: 'processed_games',
       value: { game_keys: [...processedGames] },
