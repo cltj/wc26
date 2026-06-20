@@ -146,7 +146,8 @@ function renderGames() {
     const awayFlag = FLAG_MAP[g.away] ? FLAG_MAP[g.away]+' ' : '';
     const homeL = homeFlag + g.home + (g.home.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
     const awayL = awayFlag + g.away + (g.away.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
-    const isSlot = g.home_slot && g.home === g.home_slot; // teams not yet resolved
+    const groupsDone = allGames.filter(x => x.round === 'group').every(x => x.result);
+    const isSlot = ko && !groupsDone; // knockout locked until all group games have results
 
     const predsHtml = CONTENDERS.map(name => {
       const p = allPredictions.find(p => p.game_id===g.id && p.participant===name);
@@ -186,7 +187,7 @@ function renderGames() {
           </div>` : ''}`;
       }
     } else if (isSlot) {
-      inputHtml = `<div class="pred-inp-row"><span class="locked-msg" style="color:var(--dim)">⏳ Teams not yet determined</span></div>`;
+      inputHtml = `<div class="pred-inp-row"><span class="locked-msg" style="color:var(--dim)">⏳ Opens when group stage is finished</span></div>`;
     }
 
     // Round separator
