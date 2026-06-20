@@ -148,6 +148,44 @@
 .mu-pos { font-size:7px; color:var(--dim); }
 .mu-more { display:inline-block; font-size:9px; color:var(--gold); text-decoration:none; margin-top:4px; }
 .mu-more:hover { text-decoration:underline; }
+
+/* Match detail panel */
+.sched-card { cursor:pointer; transition:transform .15s; }
+.sched-card:hover { transform:translateY(-1px); }
+.sched-card.has-detail { opacity:1; }
+.match-detail { display:none; border-top:1px solid var(--border); padding:14px; }
+.match-detail.open { display:block; }
+.md-score-hdr { display:flex; justify-content:center; align-items:center; gap:16px; margin-bottom:16px; }
+.md-team { text-align:center; }
+.md-team-flag { font-size:28px; }
+.md-team-name { font-size:11px; font-weight:600; margin-top:2px; }
+.md-vs { font-family:'Bebas Neue',sans-serif; font-size:32px; color:var(--gold); }
+.md-events { position:relative; padding:0 0 0 20px; }
+.md-event { display:flex; align-items:flex-start; gap:8px; padding:6px 0; position:relative; font-size:12px; }
+.md-event::before { content:''; position:absolute; left:-16px; top:0; bottom:0; width:2px; background:var(--border); }
+.md-event:last-child::before { bottom:50%; }
+.md-event:first-child::before { top:50%; }
+.md-event:only-child::before { display:none; }
+.md-event-dot { position:absolute; left:-20px; top:50%; transform:translateY(-50%); width:10px; height:10px; border-radius:50%; border:2px solid var(--border); background:var(--pitch); z-index:1; }
+.md-event.goal .md-event-dot { background:var(--gold); border-color:var(--gold); }
+.md-event.card-y .md-event-dot { background:#f5c542; border-color:#f5c542; }
+.md-event.card-r .md-event-dot { background:#e04040; border-color:#e04040; }
+.md-event.sub .md-event-dot { background:var(--green); border-color:var(--green); }
+.md-min { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--dim); min-width:36px; text-align:right; flex-shrink:0; }
+.md-icon { font-size:14px; flex-shrink:0; width:18px; text-align:center; }
+.md-text { flex:1; line-height:1.4; }
+.md-player { font-weight:600; }
+.md-assist { font-size:10px; color:var(--dim); }
+.md-side { font-size:9px; color:var(--dim); opacity:.7; }
+.md-lineups { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
+.md-lineup-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+.md-lineup-title .flag { font-size:14px; }
+.md-xi-player { font-size:11px; line-height:1.6; display:flex; align-items:center; gap:4px; }
+.md-xi-num { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--dim); min-width:18px; text-align:right; }
+.md-xi-pos { font-size:8px; color:var(--dim); margin-left:auto; }
+.md-xi-event { font-size:10px; margin-left:2px; }
+.md-subs-hdr { font-size:9px; color:var(--dim); margin-top:6px; margin-bottom:2px; text-transform:uppercase; letter-spacing:.05em; }
+.md-loading { text-align:center; color:var(--dim); font-size:12px; padding:20px; }
 </style>
 </head>
 <body>
@@ -255,6 +293,18 @@ function buildGameLookup() {
   return lookup;
 }
 
+// Build lookup: "normHome|normAway" -> schedule.id
+function buildSchedIdLookup() {
+  const lookup = {};
+  scheduleData.forEach(m => {
+    const h = normTeam(m.home_team), a = normTeam(m.away_team);
+    lookup[`${h}|${a}`] = m.id;
+    lookup[`${a}|${h}`] = m.id;
+  });
+  return lookup;
+}
+let schedIdLookup = {};
+
 function renderPredGame(g) {
   const user = getUser();
   const ko = isKnockout(g);
@@ -328,6 +378,13 @@ function renderPredGame(g) {
       ${!isSlot ? matchupHtml(homeName, awayName) : ''}
       <div class="preds-grid">${predsHtml}</div>
       ${inputHtml}
+      ${g.result ? (() => {
+        const sid = schedIdLookup[`${normTeam(g.home)}|${normTeam(g.away)}`];
+        return sid ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <button class="btn" style="font-size:11px;padding:5px 12px;background:rgba(255,255,255,.05);color:var(--dim);border:1px solid var(--border);border-radius:5px;cursor:pointer" onclick="event.stopPropagation();toggleMatchDetail(${sid},this)">Match details ▼</button>
+          <div class="match-detail" id="md-${sid}"></div>
+        </div>` : '';
+      })() : ''}
     </div>
   </div>`;
 }
@@ -336,18 +393,21 @@ function renderSchedCard(m) {
   const nor = m.home_team === 'Norway' || m.away_team === 'Norway';
   const isFt = m.status === 'FT';
   const scoreText = isFt ? `${m.home_score} - ${m.away_score}` : (m.kickoff_time ? fmtTime(m.kickoff_time) : 'TBD');
-  return `<div class="sched-card${nor ? ' norway' : ''}">
+  const clickable = isFt ? ` onclick="toggleMatchDetail(${m.id})"` : '';
+  return `<div class="sched-card${nor ? ' norway' : ''}${isFt ? ' has-detail' : ''}" id="sc-${m.id}"${clickable}>
     <div class="sched-row">
       <div class="s-team home"><span>${m.home_team}</span> <span class="s-flag">${flagFor(m.home_team)}</span></div>
       <div class="s-score ${isFt ? 'ft' : 'sched'}">${scoreText}</div>
       <div class="s-team"><span class="s-flag">${flagFor(m.away_team)}</span> <span>${m.away_team}</span></div>
     </div>
-    <div class="sched-meta"><span class="s-group">${m.group_name||''}</span><span>${m.stadium ? m.stadium+', '+m.city : ''}</span></div>
+    <div class="sched-meta"><span class="s-group">${m.group_name||''}</span><span>${m.stadium ? m.stadium+', '+m.city : ''}${isFt ? ' <span class="toggle-arrow">▼</span>' : ''}</span></div>
+    ${isFt ? `<div class="match-detail" id="md-${m.id}"></div>` : ''}
   </div>`;
 }
 
 function renderGames() {
   const gameLookup = buildGameLookup();
+  schedIdLookup = buildSchedIdLookup();
 
   // Group schedule by date
   const byDate = {};
@@ -566,6 +626,191 @@ async function savePred(gameId) {
   } catch(e) {
     msg.textContent = 'Error'; msg.style.color='var(--red)'; msg.classList.add('show');
   } finally { inp.disabled = false; }
+}
+
+// ── Match detail (click to expand) ───────────────────────────────────────────
+const matchDetailCache = {};
+
+async function toggleMatchDetail(schedId, btnEl) {
+  const panel = document.getElementById(`md-${schedId}`);
+  const card = document.getElementById(`sc-${schedId}`);
+  if (!panel) return;
+
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open');
+    card?.classList.remove('open');
+    if (btnEl) btnEl.textContent = 'Match details ▼';
+    return;
+  }
+
+  panel.classList.add('open');
+  card?.classList.add('open');
+  if (btnEl) btnEl.textContent = 'Match details ▲';
+
+  if (matchDetailCache[schedId]) {
+    panel.innerHTML = matchDetailCache[schedId];
+    return;
+  }
+
+  panel.innerHTML = '<div class="md-loading">Loading match data…</div>';
+
+  try {
+    const rows = await sb(`player_matches?select=*,player:players!player_matches_player_id_fkey(name,shirt_number,team_name)&game_id=eq.${schedId}&order=formation_place`);
+    const sched = scheduleData.find(s => s.id === schedId);
+    if (!sched || !rows.length) {
+      panel.innerHTML = '<div class="md-loading">No match data available</div>';
+      return;
+    }
+    const html = buildMatchDetail(sched, rows);
+    matchDetailCache[schedId] = html;
+    panel.innerHTML = html;
+  } catch(e) {
+    panel.innerHTML = `<div class="md-loading">Error loading data</div>`;
+  }
+}
+
+function parseMinute(str) {
+  if (!str) return 999;
+  const m = str.match(/(\d+)/);
+  return m ? parseInt(m[1]) : 999;
+}
+
+function shortName(fullName) {
+  if (!fullName) return '?';
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length <= 2) return fullName;
+  // Use first initial + last name
+  return parts[0][0] + '. ' + parts[parts.length - 1];
+}
+
+function buildMatchDetail(sched, rows) {
+  const homeTeam = normTeam(sched.home_team);
+  const awayTeam = normTeam(sched.away_team);
+  const homeFlag = flagFor(sched.home_team);
+  const awayFlag = flagFor(sched.away_team);
+
+  // Collect all events
+  const events = [];
+
+  rows.forEach(pm => {
+    const team = normTeam(pm.player.team_name);
+    const side = team === homeTeam ? 'home' : 'away';
+    const name = shortName(pm.player.name);
+    const num = pm.player.shirt_number;
+
+    // Goals
+    const goals = typeof pm.goals === 'string' ? JSON.parse(pm.goals) : (pm.goals || []);
+    goals.forEach(g => {
+      events.push({ type:'goal', minute:g.minute, min:parseMinute(g.minute), side, name, num, penalty:g.type==='penalty', og:g.type==='own goal' });
+    });
+
+    // Assists
+    const assists = typeof pm.assists === 'string' ? JSON.parse(pm.assists) : (pm.assists || []);
+    assists.forEach(a => {
+      events.push({ type:'assist', minute:a.minute, min:parseMinute(a.minute), side, name, num, _assoc:true });
+    });
+
+    // Cards
+    if (pm.yellow_card) {
+      events.push({ type:'card-y', minute:pm.yellow_card, min:parseMinute(pm.yellow_card), side, name, num });
+    }
+    if (pm.red_card) {
+      events.push({ type:'card-r', minute:pm.red_card, min:parseMinute(pm.red_card), side, name, num });
+    }
+
+    // Subs
+    if (pm.subbed_in && pm.sub_minute) {
+      events.push({ type:'sub', minute:pm.sub_minute, min:parseMinute(pm.sub_minute), side, name, num, subDir:'in' });
+    }
+    if (pm.subbed_out && pm.sub_minute) {
+      events.push({ type:'sub', minute:pm.sub_minute, min:parseMinute(pm.sub_minute), side, name, num, subDir:'out' });
+    }
+  });
+
+  // Pair assists with goals at same minute
+  const goalEvents = events.filter(e => e.type === 'goal');
+  const assistEvents = events.filter(e => e.type === 'assist');
+  goalEvents.forEach(g => {
+    const a = assistEvents.find(a => a.min === g.min && a.side === g.side && !a._used);
+    if (a) { g.assistName = a.name; a._used = true; }
+  });
+
+  // Pair subs (in + out at same minute on same side)
+  const subIns = events.filter(e => e.type === 'sub' && e.subDir === 'in');
+  const subOuts = events.filter(e => e.type === 'sub' && e.subDir === 'out');
+  subIns.forEach(si => {
+    const so = subOuts.find(so => so.min === si.min && so.side === si.side && !so._used);
+    if (so) { si.replacedName = so.name; so._used = true; }
+  });
+
+  // Filter out paired assists and paired sub-outs
+  const timeline = events.filter(e => !e._used && !e._assoc).sort((a,b) => a.min - b.min);
+
+  // Build timeline HTML
+  const timelineHtml = timeline.length ? timeline.map(e => {
+    let icon = '', text = '', cls = e.type;
+    if (e.type === 'goal') {
+      icon = e.og ? '🔴' : '⚽';
+      text = `<span class="md-player">${e.name}</span>${e.og ? ' (OG)' : ''}${e.penalty ? ' (pen)' : ''}${e.assistName ? `<br><span class="md-assist">assist: ${e.assistName}</span>` : ''}`;
+    } else if (e.type === 'card-y') {
+      icon = '🟨'; text = `<span class="md-player">${e.name}</span>`;
+    } else if (e.type === 'card-r') {
+      icon = '🟥'; text = `<span class="md-player">${e.name}</span>`;
+    } else if (e.type === 'sub') {
+      icon = '🔄'; text = `<span class="md-player">${e.name}</span> on${e.replacedName ? `, ${e.replacedName} off` : ''}`;
+    }
+    const sideLabel = e.side === 'home' ? homeTeam : awayTeam;
+    return `<div class="md-event ${cls}">
+      <span class="md-event-dot"></span>
+      <span class="md-min">${e.minute}</span>
+      <span class="md-icon">${icon}</span>
+      <span class="md-text">${text} <span class="md-side">${sideLabel}</span></span>
+    </div>`;
+  }).join('') : '<div style="color:var(--dim);font-size:11px;padding:8px 0">No events recorded</div>';
+
+  // Build lineups
+  const homePlayers = rows.filter(r => normTeam(r.player.team_name) === homeTeam);
+  const awayPlayers = rows.filter(r => normTeam(r.player.team_name) === awayTeam);
+
+  function lineupHtml(players, teamName, flag) {
+    const starters = players.filter(p => p.started).sort((a,b) => (a.formation_place||99) - (b.formation_place||99));
+    const subs = players.filter(p => p.subbed_in);
+
+    function playerBadges(pm) {
+      let b = '';
+      const goals = typeof pm.goals === 'string' ? JSON.parse(pm.goals) : (pm.goals || []);
+      goals.forEach(() => { b += '<span class="md-xi-event">⚽</span>'; });
+      if (pm.yellow_card) b += '<span class="md-xi-event">🟨</span>';
+      if (pm.red_card) b += '<span class="md-xi-event">🟥</span>';
+      if (pm.subbed_out) b += '<span class="md-xi-event" style="font-size:9px">↓</span>';
+      if (pm.subbed_in) b += `<span class="md-xi-event" style="font-size:9px">↑${pm.sub_minute||''}</span>`;
+      return b;
+    }
+
+    return `<div>
+      <div class="md-lineup-title"><span class="flag">${flag}</span> ${teamName}</div>
+      ${starters.map(p => `<div class="md-xi-player">
+        <span class="md-xi-num">${p.player.shirt_number}</span>
+        <span>${shortName(p.player.name)}</span>
+        ${playerBadges(p)}
+        <span class="md-xi-pos">${p.position||''}</span>
+      </div>`).join('')}
+      ${subs.length ? `<div class="md-subs-hdr">Substitutes</div>
+      ${subs.map(p => `<div class="md-xi-player">
+        <span class="md-xi-num">${p.player.shirt_number}</span>
+        <span>${shortName(p.player.name)}</span>
+        ${playerBadges(p)}
+        <span class="md-xi-pos">${p.position||''}</span>
+      </div>`).join('')}` : ''}
+    </div>`;
+  }
+
+  return `
+    <div class="md-events">${timelineHtml}</div>
+    <div class="md-lineups">
+      ${lineupHtml(homePlayers, homeTeam, homeFlag)}
+      ${lineupHtml(awayPlayers, awayTeam, awayFlag)}
+    </div>`;
 }
 
 load();
