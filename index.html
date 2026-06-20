@@ -142,10 +142,12 @@ function renderGames() {
     const kickoff = new Date(g.kickoff);
     const dateStr = kickoff.toLocaleDateString('no-NO',{day:'numeric',month:'short'});
     const timeStr = kickoff.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'});
-    const homeFlag = FLAG_MAP[g.home] ? FLAG_MAP[g.home]+' ' : '';
-    const awayFlag = FLAG_MAP[g.away] ? FLAG_MAP[g.away]+' ' : '';
-    const homeL = homeFlag + g.home + (g.home.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
-    const awayL = awayFlag + g.away + (g.away.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
+    const homeName = isSlot && g.home_slot ? g.home_slot : g.home;
+    const awayName = isSlot && g.away_slot ? g.away_slot : g.away;
+    const homeFlag = FLAG_MAP[homeName] ? FLAG_MAP[homeName]+' ' : '';
+    const awayFlag = FLAG_MAP[awayName] ? FLAG_MAP[awayName]+' ' : '';
+    const homeL = homeFlag + homeName + (homeName.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
+    const awayL = awayFlag + awayName + (awayName.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
     const groupsDone = allGames.filter(x => x.round === 'group').every(x => x.result);
     const isSlot = ko && !groupsDone; // knockout locked until all group games have results
 
