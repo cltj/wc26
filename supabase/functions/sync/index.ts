@@ -532,12 +532,18 @@ Deno.serve(async (req) => {
       }
       l(`  Found ${Object.keys(espnEvents).length / 2} ESPN events for ${matchDates.size} dates`)
 
-      // Find the prediction-league game_id for each match
-      const predGameLookup: Record<string, number> = {}
-      if (predGames) {
-        for (const pg of predGames) {
-          predGameLookup[`${pg.home}|${pg.away}`] = pg.id
-          predGameLookup[`${pg.away}|${pg.home}`] = pg.id
+      // Build schedule ID lookup: canonical team names → schedule.id
+      const { data: schedRows } = await supabase
+        .from('schedule')
+        .select('id,home_team,away_team')
+        .eq('status', 'FT')
+      const schedIdLookup: Record<string, number> = {}
+      if (schedRows) {
+        for (const s of schedRows) {
+          const h = normalizeScheduleTeam(s.home_team)
+          const a = normalizeScheduleTeam(s.away_team)
+          schedIdLookup[`${h}|${a}`] = s.id
+          schedIdLookup[`${a}|${h}`] = s.id
         }
       }
 
@@ -565,10 +571,10 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // Find the prediction-league game ID
-        const gameId = predGameLookup[gameKey]
-        if (!gameId) {
-          l(`  ⚠ No prediction game found for ${homeTeam} vs ${awayTeam}`)
+        // Find the schedule ID for this game
+        const scheduleId = schedIdLookup[gameKey]
+        if (!scheduleId) {
+          l(`  ⚠ No schedule entry found for ${homeTeam} vs ${awayTeam}`)
         }
 
         l(`  Processing ${homeTeam} vs ${awayTeam} (ESPN ${espnId})...`)
@@ -652,10 +658,10 @@ Deno.serve(async (req) => {
             }
 
             // Insert player_matches row
-            if (gameId) {
+            if (scheduleId) {
               const pmRow = {
                 player_id: pid,
-                game_id: gameId,
+                game_id: scheduleId,
                 started: rp.started,
                 subbed_in: rp.subbedIn,
                 subbed_out: rp.subbedOut,

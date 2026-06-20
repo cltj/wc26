@@ -15,7 +15,7 @@ UPDATE players SET fifa_position = position WHERE fifa_position IS NULL AND posi
 CREATE TABLE IF NOT EXISTS player_matches (
   id serial PRIMARY KEY,
   player_id integer NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  game_id integer NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  game_id bigint NOT NULL REFERENCES schedule(id) ON DELETE CASCADE,
   started boolean DEFAULT false,
   subbed_in boolean DEFAULT false,
   subbed_out boolean DEFAULT false,
