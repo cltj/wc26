@@ -133,6 +133,19 @@ async function espnScoreboard(dateStr: string): Promise<Array<{id: string, home:
     })
 }
 
+// Fetch ESPN match winner (for knockout games ending in draw after 90 min)
+async function espnMatchWinner(eventId: string): Promise<string | null> {
+  const res = await fetch(`${ESPN_API}/summary?event=${eventId}`)
+  if (!res.ok) return null
+  const data = await res.json()
+  // ESPN marks the winner in competitions[0].competitors with winner:true
+  const comps = data.header?.competitions?.[0] || {}
+  const competitors = comps.competitors || []
+  const winner = competitors.find((c: any) => c.winner === true)
+  if (winner) return mapEspnTeam(winner.team?.displayName || '')
+  return null
+}
+
 // Fetch ESPN match details, return goals/assists/cards
 async function espnMatchStats(eventId: string): Promise<{
   goals: Array<{ player: string, team: string, og: boolean }>,
@@ -340,7 +353,7 @@ Deno.serve(async (req) => {
     l(`✓ ${schedUpdates} schedule rows updated`)
 
     // ── Step 3: Update games table (prediction league) ──────────────────
-    const { data: predGames } = await supabase.from('games').select('id,home,away,result')
+    const { data: predGames } = await supabase.from('games').select('id,home,away,result,round,advancer')
     let gameUpdates = 0
     if (predGames) {
       for (const pg of predGames) {
@@ -351,8 +364,36 @@ Deno.serve(async (req) => {
         })
         if (!match) continue
         const result = `${match.home_score}-${match.away_score}`
-        if (result !== pg.result) {
-          await supabase.from('games').update({ result }).eq('id', pg.id)
+        const updates: Record<string, any> = {}
+        if (result !== pg.result) updates.result = result
+
+        // For knockout draws, detect advancer from ESPN
+        if (pg.round && pg.round !== 'group' && !pg.advancer) {
+          const [hs, as] = [parseInt(match.home_score), parseInt(match.away_score)]
+          if (hs === as) {
+            // Find ESPN event to get the winner
+            const dateStr = match.local_date || ''
+            const dm = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+            if (dm) {
+              const espnDate = `${dm[3]}${dm[1]}${dm[2]}`
+              const events = await espnScoreboard(espnDate)
+              const ev = events.find(e =>
+                (e.home === pg.home && e.away === pg.away) ||
+                (e.away === pg.home && e.home === pg.away)
+              )
+              if (ev) {
+                const winner = await espnMatchWinner(ev.id)
+                if (winner) {
+                  updates.advancer = winner
+                  l(`  Game ${pg.id} draw — advancer: ${winner}`)
+                }
+              }
+            }
+          }
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('games').update(updates).eq('id', pg.id)
           gameUpdates++
           logData.games_processed.push({ home: pg.home, away: pg.away, result })
           l(`  Game ${pg.id} ${pg.home} vs ${pg.away}: ${pg.result || 'null'} → ${result}`)
