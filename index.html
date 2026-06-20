@@ -320,7 +320,7 @@ function teamSideHtml(name) {
       <div class="mu-stat"><div class="mu-stat-val" style="color:${ga>0?'#e07070':'var(--dim)'}">${ga}</div><div class="mu-stat-lbl">GA</div></div>
     </div>
     ${matchesHtml ? `<div class="mu-matches">${matchesHtml}</div>` : ''}
-    ${t.last_formation ? `<div class="mu-lineup"><div class="mu-lineup-hdr">Last lineup <span class="mu-formation">${t.last_formation}</span></div>${(t.last_starting_xi||[]).map(p => `<div class="mu-player"><span class="mu-jersey">${p.number}</span>${p.short||p.name} <span class="mu-pos">${p.position}</span></div>`).join('')}</div>` : ''}
+    ${t.last_formation ? `<div class="mu-lineup"><div class="mu-lineup-hdr">Last starting lineup <span class="mu-formation">${t.last_formation}</span></div>${(t.last_starting_xi||[]).map(p => `<div class="mu-player"><span class="mu-jersey">${p.number}</span>${p.short||p.name} <span class="mu-pos">${p.position}</span></div>`).join('')}</div>` : ''}
     <a class="mu-more" href="team.html?team=${encodeURIComponent(canonical)}" onclick="event.stopPropagation()">View full squad &rarr;</a>
   </div>`;
 }

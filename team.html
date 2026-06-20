@@ -13,6 +13,7 @@
 .hero-conf { font-size:11px; color:var(--dim); }
 
 .section-title { font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:.5px; color:var(--gold); margin-bottom:10px; margin-top:28px; }
+.section-sub { font-size:10px; color:var(--dim); margin-bottom:12px; font-style:italic; }
 
 /* Stats bar */
 .team-stats-bar { display:grid; grid-template-columns:repeat(auto-fit,minmax(80px,1fr)); gap:1px; background:rgba(255,255,255,.06); border-radius:8px; overflow:hidden; margin-bottom:24px; }
@@ -30,15 +31,67 @@
 .form-detail { font-size:11px; color:var(--dim); line-height:1.8; }
 .form-score { font-family:'JetBrains Mono',monospace; font-weight:600; color:var(--text); }
 
-/* Lineup */
-.lineup-formation { font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700; color:var(--gold); margin-bottom:8px; }
-.lineup-note { font-size:10px; color:var(--dim); margin-bottom:10px; font-style:italic; }
-.lineup-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:6px; margin-bottom:24px; }
-.lineup-player { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:8px 10px; display:flex; align-items:center; gap:8px; }
-.lineup-player.gk { border-color:rgba(240,180,41,.25); }
-.lp-num { font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:var(--gold); min-width:22px; text-align:center; }
-.lp-name { font-size:12px; font-weight:600; }
-.lp-pos { font-size:9px; color:var(--dim); }
+/* ── Pitch formation ───────────────────────────────────────────────── */
+.pitch {
+  position:relative;
+  background: linear-gradient(180deg, #1b6b35 0%, #17612e 20%, #1a6b35 20.5%, #17612e 40%, #1a6b35 40.5%, #17612e 60%, #1a6b35 60.5%, #17612e 80%, #1a6b35 80.5%, #17612e 100%);
+  border-radius:10px;
+  border:2px solid rgba(255,255,255,.18);
+  padding:16px 8px;
+  overflow:hidden;
+  max-width:460px;
+  margin:0 auto 24px;
+}
+/* Pitch markings */
+.pitch::before {
+  content:'';
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:80px; height:80px; border-radius:50%;
+  border:2px solid rgba(255,255,255,.12);
+}
+.pitch::after {
+  content:'';
+  position:absolute; left:50%; transform:translateX(-50%);
+  bottom:0; width:140px; height:48px;
+  border:2px solid rgba(255,255,255,.12);
+  border-bottom:none;
+  border-radius:6px 6px 0 0;
+}
+.pitch-half {
+  position:absolute; left:10%; right:10%; top:50%;
+  border-top:2px solid rgba(255,255,255,.12);
+}
+.pitch-row {
+  display:flex;
+  justify-content:space-evenly;
+  align-items:center;
+  padding:10px 4px;
+  position:relative;
+  z-index:1;
+}
+.pitch-row.gk-row { padding:14px 4px 6px; }
+.pp {
+  display:flex; flex-direction:column; align-items:center;
+  width:56px;
+}
+.pp-circle {
+  width:34px; height:34px; border-radius:50%;
+  background:rgba(0,0,0,.45); border:2px solid rgba(255,255,255,.5);
+  display:flex; align-items:center; justify-content:center;
+  font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700;
+  color:#fff; margin-bottom:3px;
+}
+.pp.gk .pp-circle { background:rgba(240,180,41,.3); border-color:var(--gold); }
+.pp-name {
+  font-size:8px; font-weight:600; color:#fff; text-align:center;
+  text-shadow:0 1px 3px rgba(0,0,0,.6);
+  line-height:1.2; max-width:64px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.pitch-formation-label {
+  text-align:center; font-family:'JetBrains Mono',monospace;
+  font-size:13px; font-weight:700; color:var(--gold);
+  margin-bottom:6px;
+}
 
 /* Roster table */
 .roster-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
@@ -52,7 +105,6 @@
 .roster tr:hover { background:rgba(255,255,255,.02); }
 .roster .player-name { font-weight:600; }
 .roster .player-club { font-size:10px; color:var(--dim); margin-top:1px; }
-.roster .starter-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--gold); margin-right:4px; vertical-align:middle; }
 .roster .pos-badge { font-size:9px; padding:1px 5px; border-radius:3px; font-weight:600; }
 .pos-gk { background:rgba(240,180,41,.15); color:var(--gold); }
 .pos-df { background:rgba(59,130,246,.12); color:#7cb3f4; }
@@ -61,13 +113,15 @@
 .stat-highlight { color:var(--green); font-weight:700; }
 .stat-yellow { color:#f0b429; }
 .stat-red { color:#e07070; }
+.sub-header { font-size:11px; color:var(--dim); padding:12px 6px 6px; border-bottom:1px solid var(--border); font-weight:600; text-transform:uppercase; letter-spacing:.06em; }
 
 /* WC ranking */
 .ranking-badge { display:inline-flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:8px 14px; font-size:13px; margin-right:10px; margin-bottom:8px; }
 .ranking-pos { font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--gold); }
 
 .loading { color:var(--dim); font-size:13px; text-align:center; padding:40px; }
-.back-link { font-size:12px; color:var(--dim); margin-bottom:16px; display:inline-block; }
+.back-links { display:flex; gap:16px; margin-bottom:16px; }
+.back-link { font-size:12px; color:var(--dim); display:inline-block; text-decoration:none; }
 .back-link:hover { color:var(--gold); }
 </style>
 </head>
@@ -75,7 +129,10 @@
 <div class="page">
   <div id="team-loading" class="loading">Loading team...</div>
   <div id="team-content" style="display:none">
-    <a href="teams.html" class="back-link">&larr; All teams</a>
+    <div class="back-links">
+      <a href="index.html" class="back-link">&larr; League</a>
+      <a href="teams.html" class="back-link">&larr; All teams</a>
+    </div>
     <div id="hero"></div>
     <div id="stats-bar"></div>
     <div id="wc-ranking"></div>
@@ -110,13 +167,116 @@ function calcAge(dobStr) {
   return age;
 }
 
-const POS_ORDER = { GK:0, DF:1, MF:2, FW:3 };
 function posGroup(pos) {
   if (!pos) return 'MF';
   if (pos === 'GK') return 'GK';
   if (['DF','CB','LB','RB','LWB','RWB'].includes(pos)) return 'DF';
   if (['FW','CF','LW','RW','ST','SS'].includes(pos)) return 'FW';
   return 'MF';
+}
+
+// ── Position ranking for formation row assignment ──
+// Lower = more defensive (GK=0, DEF=1, MID=2-3, FW=4)
+function posRank(pos) {
+  if (!pos) return 2;
+  const p = pos.toUpperCase();
+  if (p.includes('G')) return 0;         // Goalkeeper
+  if (p.match(/^(CD|CB|LB|RB|LWB|RWB)/)) return 1;  // Defenders
+  if (p.match(/^(DM|CDM|CM)/)) return 2; // Defensive/central midfield
+  if (p.match(/^(AM|CAM|LM|RM)/)) return 3; // Attacking mid / wide mid
+  if (p.match(/^(CF|F|LW|RW|ST|SS)/)) return 4; // Forwards
+  return 2;
+}
+
+// Build formation pitch HTML from starting XI and formation string
+function buildPitchHtml(xi, formation) {
+  if (!xi.length || !formation) return '';
+
+  // Parse formation: "4-2-3-1" → [4,2,3,1]
+  const layers = formation.split('-').map(Number).filter(n => !isNaN(n) && n > 0);
+  if (!layers.length) return '';
+
+  // Separate GK from outfield
+  const gk = xi.find(p => posRank(p.position) === 0);
+  const outfield = xi.filter(p => posRank(p.position) !== 0);
+
+  // Sort outfield by defensive-to-offensive position
+  outfield.sort((a, b) => posRank(a.position) - posRank(b.position));
+
+  // Assign players to formation rows (defense → attack)
+  const rows = [];
+  let idx = 0;
+  for (const count of layers) {
+    rows.push(outfield.slice(idx, idx + count));
+    idx += count;
+  }
+  // If any leftover (shouldn't happen), add to last row
+  if (idx < outfield.length) rows[rows.length - 1].push(...outfield.slice(idx));
+
+  // Render: forwards at top, GK at bottom
+  const reversedRows = [...rows].reverse();
+
+  let html = `<div class="pitch-formation-label">${formation}</div><div class="pitch">`;
+  html += '<div class="pitch-half"></div>';
+
+  // Outfield rows (forwards first)
+  reversedRows.forEach(row => {
+    html += '<div class="pitch-row">';
+    row.forEach(p => {
+      html += `<div class="pp"><div class="pp-circle">${p.number}</div><div class="pp-name">${p.short || p.name}</div></div>`;
+    });
+    html += '</div>';
+  });
+
+  // GK row
+  if (gk) {
+    html += `<div class="pitch-row gk-row"><div class="pp gk"><div class="pp-circle">${gk.number}</div><div class="pp-name">${gk.short || gk.name}</div></div></div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// Check if a squad player was in the starting XI (fuzzy name match)
+function isInXI(player, starterNames) {
+  const full = (player.name || '').toLowerCase();
+  const firstLast = `${player.first_name || ''} ${player.last_name || ''}`.toLowerCase().trim();
+  const lastName = (player.last_name || player.name?.split(' ').pop() || '').toLowerCase();
+
+  for (const sn of starterNames) {
+    if (sn === full || sn === firstLast) return true;
+    // Last name match — also check first initial
+    const snLast = sn.split(' ').pop();
+    if (snLast === lastName && sn.charAt(0) === full.charAt(0)) return true;
+    // Partial contains
+    if (full.includes(snLast) && snLast.length > 3) return true;
+  }
+  return false;
+}
+
+// Sort by stats: goals desc, assists desc, yellows desc, reds desc
+function statSort(a, b) {
+  return (b.goals||0) - (a.goals||0)
+      || (b.assists||0) - (a.assists||0)
+      || (b.yellow_cards||0) - (a.yellow_cards||0)
+      || (b.red_cards||0) - (a.red_cards||0);
+}
+
+function rosterRow(p) {
+  const pg = posGroup(p.position);
+  const age = calcAge(p.dob);
+  return `<tr>
+    <td class="num-col">${p.shirt_number||''}</td>
+    <td><span class="player-name">${p.name_on_shirt || p.last_name || p.name}</span>
+      <div class="player-club">${p.club||''}</div></td>
+    <td><span class="pos-badge pos-${pg.toLowerCase()}">${p.position||'—'}</span></td>
+    <td class="stat-col">${age !== null ? age : '—'}</td>
+    <td class="stat-col">${p.caps||'—'}</td>
+    <td class="stat-col ${p.goals?'stat-highlight':''}">${p.goals||0}</td>
+    <td class="stat-col ${p.assists?'stat-highlight':''}">${p.assists||0}</td>
+    <td class="stat-col ${p.yellow_cards?'stat-yellow':''}">${p.yellow_cards||0}</td>
+    <td class="stat-col ${p.red_cards?'stat-red':''}">${p.red_cards||0}</td>
+  </tr>`;
 }
 
 async function loadTeam(name) {
@@ -184,7 +344,7 @@ async function loadTeam(name) {
         <div class="ts-cell"><div class="ts-val" style="color:var(--gold)">${w*3+d}</div><div class="ts-lbl">Points</div></div>
       </div>`;
 
-    // WC Ranking — compute all teams' points and goals to rank
+    // WC Ranking
     const allTeams = await sb('teams?select=name&order=name');
     const teamStats = {};
     allTeams.forEach(t => { teamStats[t.name] = { pts:0, gf:0, name:t.name }; });
@@ -214,7 +374,7 @@ async function loadTeam(name) {
         <span class="ranking-badge"><span class="ranking-pos">#${myRankGf}</span> by goals scored (${gf})</span>
       </div>`;
 
-    // Form + results
+    // Form
     const form = results.slice(-5);
     const formDots = Array(5).fill(null).map((_,i) => {
       const r = form[i]?.res || 'U';
@@ -229,66 +389,76 @@ async function loadTeam(name) {
       <div class="form-row">${formDots}</div>
       ${resultsHtml ? `<div class="form-detail">${resultsHtml}</div>` : '<div class="form-detail">No matches played yet</div>'}`;
 
-    // Lineup
+    // ── Lineup on a pitch ──
     const xi = team.last_starting_xi || [];
     const formation = team.last_formation || '';
     let lineupHtml = '';
     if (xi.length) {
       lineupHtml = `
-        <div class="section-title">Last Starting XI</div>
-        <div class="lineup-note">Formation used in the most recent match</div>
-        <div class="lineup-formation">${formation}</div>
-        <div class="lineup-grid">${xi.map(p => {
-          const isGk = (p.position||'').includes('G');
-          return `<div class="lineup-player${isGk?' gk':''}">
-            <div class="lp-num">${p.number}</div>
-            <div><div class="lp-name">${p.short||p.name}</div><div class="lp-pos">${p.position}</div></div>
-          </div>`;
-        }).join('')}</div>`;
+        <div class="section-title">Last Starting Lineup</div>
+        <div class="section-sub">Formation used in the most recent match</div>
+        ${buildPitchHtml(xi, formation)}`;
     }
     document.getElementById('lineup-section').innerHTML = lineupHtml;
 
-    // Roster — mark starters
-    const starterNames = new Set(xi.map(p => (p.name||'').toLowerCase()));
-    players.sort((a,b) => (POS_ORDER[posGroup(a.position)]??2) - (POS_ORDER[posGroup(b.position)]??2) || (a.shirt_number||99) - (b.shirt_number||99));
+    // ── Roster ──
+    const starterNames = xi.map(p => (p.name||'').toLowerCase());
 
-    const rosterRows = players.map(p => {
-      const pg = posGroup(p.position);
-      const age = calcAge(p.dob);
-      const isStarter = starterNames.has(p.name?.toLowerCase()) ||
-        starterNames.has(`${p.first_name} ${p.last_name}`.toLowerCase());
-      return `<tr>
-        <td class="num-col">${p.shirt_number||''}</td>
-        <td>${isStarter?'<span class="starter-dot" title="Started last match"></span>':''}<span class="player-name">${p.name_on_shirt || p.last_name || p.name}</span>
-          <div class="player-club">${p.club||''}</div></td>
-        <td><span class="pos-badge pos-${pg.toLowerCase()}">${p.position||'—'}</span></td>
-        <td class="stat-col">${age !== null ? age : '—'}</td>
-        <td class="stat-col">${p.caps||'—'}</td>
-        <td class="stat-col ${p.goals?'stat-highlight':''}">${p.goals||0}</td>
-        <td class="stat-col ${p.assists?'stat-highlight':''}">${p.assists||0}</td>
-        <td class="stat-col ${p.yellow_cards?'stat-yellow':''}">${p.yellow_cards||0}</td>
-        <td class="stat-col ${p.red_cards?'stat-red':''}">${p.red_cards||0}</td>
-      </tr>`;
-    }).join('');
+    // Split into starters (in last XI), substitutes (not in XI but have stats), unused
+    const starters = [];
+    const substitutes = [];
+    const unused = [];
 
-    document.getElementById('roster-section').innerHTML = `
+    players.forEach(p => {
+      if (isInXI(p, starterNames)) {
+        starters.push(p);
+      } else if ((p.goals||0) > 0 || (p.assists||0) > 0 || (p.yellow_cards||0) > 0 || (p.red_cards||0) > 0) {
+        substitutes.push(p);
+      } else {
+        unused.push(p);
+      }
+    });
+
+    starters.sort(statSort);
+    substitutes.sort(statSort);
+    unused.sort((a,b) => {
+      const pg = { GK:0, DF:1, MF:2, FW:3 };
+      return (pg[posGroup(a.position)]??2) - (pg[posGroup(b.position)]??2) || (a.shirt_number||99) - (b.shirt_number||99);
+    });
+
+    const thead = `<thead><tr>
+      <th class="num-col">#</th>
+      <th>Player</th>
+      <th>Pos</th>
+      <th class="stat-col">Age</th>
+      <th class="stat-col">Caps</th>
+      <th class="stat-col">G</th>
+      <th class="stat-col">A</th>
+      <th class="stat-col">Y</th>
+      <th class="stat-col">R</th>
+    </tr></thead>`;
+
+    let rosterHtml = `
       <div class="section-title">Full Squad (${players.length} players)</div>
-      <div class="roster-wrap">
-        <table class="roster">
-          <thead><tr>
-            <th class="num-col">#</th>
-            <th>Player</th>
-            <th>Pos</th>
-            <th class="stat-col">Age</th>
-            <th class="stat-col">Caps</th>
-            <th class="stat-col">G</th>
-            <th class="stat-col">A</th>
-            <th class="stat-col">Y</th>
-            <th class="stat-col">R</th>
-          </tr></thead>
-          <tbody>${rosterRows}</tbody>
-        </table>
-      </div>`;
+      <div class="roster-wrap"><table class="roster">${thead}<tbody>`;
+
+    if (starters.length) {
+      rosterHtml += `<tr><td colspan="9" class="sub-header">Starting XI (last match)</td></tr>`;
+      rosterHtml += starters.map(rosterRow).join('');
+    }
+
+    if (substitutes.length) {
+      rosterHtml += `<tr><td colspan="9" class="sub-header">Used Substitutes</td></tr>`;
+      rosterHtml += substitutes.map(rosterRow).join('');
+    }
+
+    if (unused.length) {
+      rosterHtml += `<tr><td colspan="9" class="sub-header">Rest of Squad</td></tr>`;
+      rosterHtml += unused.map(rosterRow).join('');
+    }
+
+    rosterHtml += '</tbody></table></div>';
+    document.getElementById('roster-section').innerHTML = rosterHtml;
 
     loading.style.display = 'none';
     content.style.display = 'block';
