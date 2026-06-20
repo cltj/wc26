@@ -519,7 +519,7 @@ function teamSideHtml(name, matchPlayers) {
       if (p.subbed_in) b += `<span class="mu-sub-in"> ↑${p.sub_minute||''}</span>`;
       return `<div class="mu-player"><span class="mu-jersey">${p.player.shirt_number}</span>${shortName(p.player.name)}${b} <span class="mu-pos">${p.position||''}</span></div>`;
     };
-    lineupHtml = `<div class="mu-lineup"><div class="mu-lineup-hdr">Starting XI</div>${starters.map(pLine).join('')}${subs.length ? `<div class="mu-subs-hdr">Subs</div>${subs.map(pLine).join('')}` : ''}</div>`;
+    lineupHtml = `<div class="mu-lineup"><div class="mu-lineup-hdr">Starting</div>${starters.map(pLine).join('')}${subs.length ? `<div class="mu-subs-hdr">Subs</div>${subs.map(pLine).join('')}` : ''}</div>`;
   } else if (t.last_formation) {
     lineupHtml = `<div class="mu-lineup"><div class="mu-lineup-hdr">Last starting lineup <span class="mu-formation">${t.last_formation}</span></div>${(t.last_starting_xi||[]).map(p => `<div class="mu-player"><span class="mu-jersey">${p.number}</span>${p.short||p.name} <span class="mu-pos">${p.position}</span></div>`).join('')}</div>`;
   }
