@@ -193,10 +193,16 @@ function calcAge(dobStr) {
 
 function posGroup(pos) {
   if (!pos) return 'MF';
-  if (pos === 'GK') return 'GK';
-  if (['DF','CB','LB','RB','LWB','RWB'].includes(pos)) return 'DF';
-  if (['FW','CF','LW','RW','ST','SS'].includes(pos)) return 'FW';
+  const p = pos.toUpperCase();
+  if (p === 'GK' || p === 'G') return 'GK';
+  if (['DF','CB','LB','RB','LWB','RWB'].includes(p) || p.match(/^(CD|CB|LB|RB|LWB|RWB)/)) return 'DF';
+  if (['FW','CF','LW','RW','ST','SS','F'].includes(p) || p.match(/^(CF|F|LW|RW|ST|SS|RF|LF)/)) return 'FW';
   return 'MF';
+}
+
+// Get best display position: prefer espn_position, fall back to fifa_position/position
+function displayPos(player) {
+  return player.espn_position || player.fifa_position || player.position || '—';
 }
 
 // ── Position ranking for formation row assignment ──
@@ -261,30 +267,6 @@ function buildPitchHtml(xi, formation) {
   return html;
 }
 
-// Normalize diacritics for fuzzy matching (ø→o, å→a, ü→u, é→e etc.)
-function stripAccents(s) {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ø/g,'o').replace(/æ/g,'ae').replace(/ð/g,'d');
-}
-
-// Check if a squad player was in a name list (fuzzy name match)
-function isInXI(player, nameList) {
-  const full = stripAccents((player.name || '').toLowerCase());
-  const firstLast = stripAccents(`${player.first_name || ''} ${player.last_name || ''}`.toLowerCase().trim());
-  const lastName = stripAccents((player.last_name || player.name?.split(' ').pop() || '').toLowerCase());
-
-  for (const raw of nameList) {
-    const sn = stripAccents(raw);
-    if (sn === full || sn === firstLast) return true;
-    const snLast = sn.split(' ').pop();
-    // Last name match + first initial
-    if (snLast === lastName && sn.charAt(0) === full.charAt(0)) return true;
-    // Partial contains (for middle names: "Leo Østigard" in "Leo Skiri Østigård")
-    if (full.includes(snLast) && snLast.length > 3) return true;
-    if (sn.includes(lastName) && lastName.length > 3) return true;
-  }
-  return false;
-}
-
 // Sort by stats: goals desc, assists desc, yellows desc, reds desc
 function statSort(a, b) {
   return (b.goals||0) - (a.goals||0)
@@ -294,15 +276,16 @@ function statSort(a, b) {
 }
 
 function rosterRow(p) {
-  const pg = posGroup(p.position);
+  const pos = displayPos(p);
+  const pg = posGroup(pos);
   const age = calcAge(p.dob);
   return `<tr>
     <td class="num-col">${p.shirt_number||''}</td>
     <td><span class="player-name">${p.name_on_shirt || p.last_name || p.name}</span>
       <div class="player-club">${p.club||''}</div></td>
-    <td><span class="pos-badge pos-${pg.toLowerCase()}">${p.position||'—'}</span></td>
+    <td><span class="pos-badge pos-${pg.toLowerCase()}">${pos}</span></td>
     <td class="stat-col">${age !== null ? age : '—'}</td>
-    <td class="stat-col">${p.caps||'—'}</td>
+    <td class="stat-col">${p.matches_played||0}</td>
     <td class="stat-col ${p.goals?'stat-highlight':''}">${p.goals||0}</td>
     <td class="stat-col ${p.assists?'stat-highlight':''}">${p.assists||0}</td>
     <td class="stat-col ${p.yellow_cards?'stat-yellow':''}">${p.yellow_cards||0}</td>
@@ -320,7 +303,7 @@ async function loadTeam(name) {
       const rows = [];
       let offset = 0;
       while (true) {
-        const batch = await sb(`players?select=name,team_name,goals,assists,yellow_cards,red_cards&order=name&offset=${offset}&limit=500`);
+        const batch = await sb(`players?select=name,team_name,goals,assists,yellow_cards,red_cards,matches_played&order=name&offset=${offset}&limit=500`);
         rows.push(...batch);
         if (batch.length < 500) break;
         offset += 500;
@@ -328,12 +311,30 @@ async function loadTeam(name) {
       return rows;
     })();
 
-    const [teams, players, schedule, allPlayers] = await Promise.all([
+    // Also fetch player_matches for this team's players
+    const playerMatchesP = sb(`players?select=id&team_name=eq.${encodeURIComponent(name)}`)
+      .then(ids => {
+        if (!ids.length) return [];
+        const idList = ids.map(p => p.id).join(',');
+        return sb(`player_matches?select=*&player_id=in.(${idList})&order=game_id`);
+      });
+
+    const [teams, players, schedule, allPlayers, playerMatches] = await Promise.all([
       sb(`teams?select=*&name=eq.${encodeURIComponent(name)}`),
       sb(`players?select=*&team_name=eq.${encodeURIComponent(name)}&order=shirt_number`),
       sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id'),
       allPlayersP,
+      playerMatchesP,
     ]);
+
+    // Build lookup: player_id → latest player_matches entry
+    const pmByPlayer = {};
+    const pmAllByPlayer = {};
+    playerMatches.forEach(pm => {
+      pmByPlayer[pm.player_id] = pm; // last one wins (ordered by game_id)
+      if (!pmAllByPlayer[pm.player_id]) pmAllByPlayer[pm.player_id] = [];
+      pmAllByPlayer[pm.player_id].push(pm);
+    });
 
     if (!teams.length) { loading.textContent = `Team "${name}" not found.`; return; }
     const team = teams[0];
@@ -526,19 +527,22 @@ async function loadTeam(name) {
     document.getElementById('lineup-section').innerHTML = lineupHtml;
 
     // ── Roster ──
-    const starterNames = xi.map(p => (p.name||'').toLowerCase());
-    const subs = team.last_substitutes || [];
-    const subNames = subs.map(p => (p.name||'').toLowerCase());
+    // Use player_matches data to split roster: starters / subs / rest
+    // Find the latest game_id that has player_matches for this team
+    const latestGameId = playerMatches.length ? Math.max(...playerMatches.map(pm => pm.game_id)) : null;
+    const lastMatchPMs = latestGameId ? playerMatches.filter(pm => pm.game_id === latestGameId) : [];
 
-    // Split into starters (in last XI), substitutes (subbed in last match), rest
+    const starterIds = new Set(lastMatchPMs.filter(pm => pm.started).map(pm => pm.player_id));
+    const subInIds = new Set(lastMatchPMs.filter(pm => pm.subbed_in).map(pm => pm.player_id));
+
     const starters = [];
     const substitutes = [];
     const unused = [];
 
     players.forEach(p => {
-      if (isInXI(p, starterNames)) {
+      if (starterIds.has(p.id)) {
         starters.push(p);
-      } else if (isInXI(p, subNames)) {
+      } else if (subInIds.has(p.id)) {
         substitutes.push(p);
       } else {
         unused.push(p);
@@ -549,7 +553,8 @@ async function loadTeam(name) {
     substitutes.sort(statSort);
     unused.sort((a,b) => {
       const pg = { GK:0, DF:1, MF:2, FW:3 };
-      return (pg[posGroup(a.position)]??2) - (pg[posGroup(b.position)]??2) || (a.shirt_number||99) - (b.shirt_number||99);
+      const posA = displayPos(a), posB = displayPos(b);
+      return (pg[posGroup(posA)]??2) - (pg[posGroup(posB)]??2) || (a.shirt_number||99) - (b.shirt_number||99);
     });
 
     const thead = `<thead><tr>
@@ -557,7 +562,7 @@ async function loadTeam(name) {
       <th>Player</th>
       <th>Pos</th>
       <th class="stat-col">Age</th>
-      <th class="stat-col">Caps <span class="help-q" onclick="this.nextElementSibling.classList.toggle('show')">?</span><span class="help-tip">Career international appearances (all time, not just this tournament)</span></th>
+      <th class="stat-col">MP</th>
       <th class="stat-col">G</th>
       <th class="stat-col">A</th>
       <th class="stat-col">Y</th>

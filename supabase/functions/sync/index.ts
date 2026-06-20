@@ -146,70 +146,124 @@ async function espnMatchWinner(eventId: string): Promise<string | null> {
   return null
 }
 
-// Fetch ESPN lineups (formation + starting XI + substitutes) for both teams
-async function espnLineups(eventId: string): Promise<Array<{
-  team: string, formation: string,
-  starters: Array<{ name: string, short: string, number: string, position: string }>,
-  substitutes: Array<{ name: string, short: string, number: string, position: string }>,
-}>> {
-  const result: Array<{ team: string, formation: string, starters: any[], substitutes: any[] }> = []
+// ── Single ESPN fetch: extract lineups, events, and per-player data ──────────
+
+interface MatchPlayerData {
+  name: string
+  short: string
+  number: string
+  position: string       // tactical position (e.g. "RB", "CM-L", "AM")
+  espnId: string
+  started: boolean
+  subbedIn: boolean
+  subbedOut: boolean
+  formationPlace: number // 1-11 for starters, 0 for subs
+  subbedInForName: string // name of player replaced (empty if N/A)
+}
+
+interface MatchEvent {
+  type: 'goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out'
+  player: string
+  team: string
+  minute: string         // e.g. "27'", "45'+5'"
+  og?: boolean           // own goal
+  penaltyKick?: boolean
+  replacedBy?: string    // for sub_out: who came on
+  replacing?: string     // for sub_in: who went off
+}
+
+interface EspnMatchData {
+  lineups: Array<{
+    team: string
+    formation: string
+    players: MatchPlayerData[]  // all 26 squad players
+  }>
+  events: MatchEvent[]
+  // Legacy format for teams table (last_starting_xi / last_substitutes)
+  teamLineups: Array<{
+    team: string
+    formation: string
+    starters: Array<{ name: string, short: string, number: string, position: string }>
+    substitutes: Array<{ name: string, short: string, number: string, position: string }>
+  }>
+}
+
+async function espnMatchData(eventId: string): Promise<EspnMatchData> {
+  const result: EspnMatchData = { lineups: [], events: [], teamLineups: [] }
   const res = await fetch(`${ESPN_API}/summary?event=${eventId}`)
   if (!res.ok) return result
   const data = await res.json()
+
+  // ── Parse rosters ──────────────────────────────────────────────────────
   for (const r of (data.rosters || [])) {
     const team = mapEspnTeam(r.team?.displayName || '')
     const formation = r.formation || ''
-    const mapPlayer = (e: any) => ({
-      name: e.athlete?.displayName || '',
-      short: e.athlete?.shortName || e.athlete?.lastName || '',
-      number: e.jersey || '',
-      position: e.position?.abbreviation || '',
-    })
-    const starters = (r.roster || []).filter((e: any) => e.starter).map(mapPlayer)
-    const substitutes = (r.roster || []).filter((e: any) => e.subbedIn).map(mapPlayer)
-    if (team && starters.length > 0) {
-      result.push({ team, formation, starters, substitutes })
+
+    const players: MatchPlayerData[] = []
+    const startersList: Array<{ name: string, short: string, number: string, position: string }> = []
+    const subsList: Array<{ name: string, short: string, number: string, position: string }> = []
+
+    for (const e of (r.roster || [])) {
+      const pd: MatchPlayerData = {
+        name: e.athlete?.displayName || '',
+        short: e.athlete?.shortName || e.athlete?.lastName || '',
+        number: e.jersey || '',
+        position: e.position?.abbreviation || '',
+        espnId: String(e.athlete?.id || ''),
+        started: !!e.starter,
+        subbedIn: !!e.subbedIn,
+        subbedOut: !!e.subbedOut,
+        formationPlace: parseInt(e.formationPlace) || 0,
+        subbedInForName: e.subbedInFor?.athlete?.displayName || '',
+      }
+      players.push(pd)
+
+      if (e.starter) {
+        startersList.push({ name: pd.name, short: pd.short, number: pd.number, position: pd.position })
+      }
+      if (e.subbedIn) {
+        subsList.push({ name: pd.name, short: pd.short, number: pd.number, position: pd.position })
+      }
+    }
+
+    if (team && players.length > 0) {
+      result.lineups.push({ team, formation, players })
+      result.teamLineups.push({ team, formation, starters: startersList, substitutes: subsList })
     }
   }
-  return result
-}
 
-// Fetch ESPN match details, return goals/assists/cards
-async function espnMatchStats(eventId: string): Promise<{
-  goals: Array<{ player: string, team: string, og: boolean }>,
-  assists: Array<{ player: string, team: string }>,
-  yellows: Array<{ player: string, team: string }>,
-  reds: Array<{ player: string, team: string }>,
-}> {
-  const result = { goals: [] as any[], assists: [] as any[], yellows: [] as any[], reds: [] as any[] }
-  const res = await fetch(`${ESPN_API}/summary?event=${eventId}`)
-  if (!res.ok) return result
-  const data = await res.json()
-
+  // ── Parse key events (goals, cards, subs with minutes) ─────────────────
   for (const e of (data.keyEvents || [])) {
     const tt = e.type?.type || ''
     const participants = e.participants || []
     const teamName = mapEspnTeam(e.team?.displayName || '')
+    const minute = e.clock?.displayValue || ''
     const athlete = participants[0]?.athlete?.displayName || ''
     if (!athlete) continue
 
     if (tt.includes('goal')) {
       const og = tt.includes('own-goal') || (e.text || '').includes('Own Goal')
-      result.goals.push({ player: athlete, team: og ? '' : teamName, og })
+      const pk = !!e.penaltyKick
+      result.events.push({ type: 'goal', player: athlete, team: og ? '' : teamName, minute, og, penaltyKick: pk })
 
-      // Assist is the second participant
       if (participants.length > 1) {
         const assistName = participants[1]?.athlete?.displayName || ''
         if (assistName) {
-          result.assists.push({ player: assistName, team: teamName })
+          result.events.push({ type: 'assist', player: assistName, team: teamName, minute })
         }
       }
     } else if (tt === 'yellow-card') {
-      result.yellows.push({ player: athlete, team: teamName })
+      result.events.push({ type: 'yellow', player: athlete, team: teamName, minute })
     } else if (tt === 'red-card' || tt === 'yellow-red-card') {
-      result.reds.push({ player: athlete, team: teamName })
+      result.events.push({ type: 'red', player: athlete, team: teamName, minute })
+    } else if (tt === 'substitution') {
+      const subIn = participants[0]?.athlete?.displayName || ''
+      const subOut = participants[1]?.athlete?.displayName || ''
+      if (subIn) result.events.push({ type: 'sub_in', player: subIn, team: teamName, minute, replacing: subOut })
+      if (subOut) result.events.push({ type: 'sub_out', player: subOut, team: teamName, minute, replacedBy: subIn })
     }
   }
+
   return result
 }
 
@@ -445,7 +499,7 @@ Deno.serve(async (req) => {
       while (true) {
         const { data } = await supabase
           .from('players')
-          .select('id,name,name_on_shirt,team_name,goals,assists,yellow_cards,red_cards')
+          .select('id,name,name_on_shirt,team_name,goals,assists,yellow_cards,red_cards,matches_played,espn_id')
           .order('team_name')
           .range(offset, offset + 499)
         if (!data || data.length === 0) break
@@ -460,7 +514,7 @@ Deno.serve(async (req) => {
         playersByTeam[pl.team_name].push(pl)
       }
 
-      // ── Step 5: Fetch player stats from ESPN ──────────────────────────
+      // ── Step 5: Fetch ESPN event IDs for new games ────────────────────
       const matchDates = new Set<string>()
       for (const g of newFinished) {
         const dateStr = g.local_date || ''
@@ -478,12 +532,24 @@ Deno.serve(async (req) => {
       }
       l(`  Found ${Object.keys(espnEvents).length / 2} ESPN events for ${matchDates.size} dates`)
 
+      // Find the prediction-league game_id for each match
+      const predGameLookup: Record<string, number> = {}
+      if (predGames) {
+        for (const pg of predGames) {
+          predGameLookup[`${pg.home}|${pg.away}`] = pg.id
+          predGameLookup[`${pg.away}|${pg.home}`] = pg.id
+        }
+      }
+
       // Aggregate stats per player across all new games
       const statDeltas: Record<number, { goals: number, assists: number, yellows: number, reds: number, name: string, team: string }> = {}
       const addStat = (pid: number, name: string, team: string, field: 'goals'|'assists'|'yellows'|'reds') => {
         if (!statDeltas[pid]) statDeltas[pid] = { goals: 0, assists: 0, yellows: 0, reds: 0, name, team }
         statDeltas[pid][field]++
       }
+
+      // Track which players appeared (for matches_played + espn_id updates)
+      const playerAppearances: Record<number, { espnId: string, espnPosition: string, count: number }> = {}
 
       let unmatchedPlayers: string[] = []
 
@@ -499,14 +565,17 @@ Deno.serve(async (req) => {
           continue
         }
 
-        l(`  Processing ${homeTeam} vs ${awayTeam} (ESPN ${espnId})...`)
-        const [stats, lineups] = await Promise.all([
-          espnMatchStats(espnId),
-          espnLineups(espnId),
-        ])
+        // Find the prediction-league game ID
+        const gameId = predGameLookup[gameKey]
+        if (!gameId) {
+          l(`  ⚠ No prediction game found for ${homeTeam} vs ${awayTeam}`)
+        }
 
-        // Update team formations/starting XI/substitutes
-        for (const lu of lineups) {
+        l(`  Processing ${homeTeam} vs ${awayTeam} (ESPN ${espnId})...`)
+        const matchData = await espnMatchData(espnId)
+
+        // Update team formations/starting XI/substitutes (legacy format)
+        for (const lu of matchData.teamLineups) {
           await supabase.from('teams').update({
             last_formation: lu.formation,
             last_starting_xi: lu.starters,
@@ -514,67 +583,127 @@ Deno.serve(async (req) => {
           }).eq('name', lu.team)
         }
 
-        // Add to games_processed log
+        // ── Build player_matches rows ─────────────────────────────────────
+        // First, build per-player event data from keyEvents
+        const playerEvents: Record<string, { // keyed by "team|espnPlayerName"
+          goals: Array<{ minute: string }>,
+          assists: Array<{ minute: string }>,
+          yellowMinute: string | null,
+          redMinute: string | null,
+          subInMinute: string | null,
+          subOutMinute: string | null,
+          replacing: string | null,
+          replacedBy: string | null,
+        }> = {}
+
+        const getPlayerEvents = (team: string, name: string) => {
+          const key = `${team}|${name}`
+          if (!playerEvents[key]) playerEvents[key] = {
+            goals: [], assists: [], yellowMinute: null, redMinute: null,
+            subInMinute: null, subOutMinute: null, replacing: null, replacedBy: null,
+          }
+          return playerEvents[key]
+        }
+
+        for (const ev of matchData.events) {
+          const pe = getPlayerEvents(ev.team, ev.player)
+          if (ev.type === 'goal' && !ev.og) pe.goals.push({ minute: ev.minute })
+          else if (ev.type === 'assist') pe.assists.push({ minute: ev.minute })
+          else if (ev.type === 'yellow') pe.yellowMinute = ev.minute
+          else if (ev.type === 'red') pe.redMinute = ev.minute
+          else if (ev.type === 'sub_in') { pe.subInMinute = ev.minute; pe.replacing = ev.replacing || null }
+          else if (ev.type === 'sub_out') { pe.subOutMinute = ev.minute; pe.replacedBy = ev.replacedBy || null }
+        }
+
+        // Now iterate roster players and build player_matches + stat deltas
+        for (const lineup of matchData.lineups) {
+          const team = lineup.team
+          const teamPlayers = playersByTeam[team] || []
+
+          for (const rp of lineup.players) {
+            // Only process players who actually played (started or subbed in)
+            if (!rp.started && !rp.subbedIn) continue
+
+            const pid = matchPlayer(rp.name, team, teamPlayers)
+            if (!pid) {
+              if (rp.started || rp.subbedIn) unmatchedPlayers.push(`${rp.name} (${team}) [roster]`)
+              continue
+            }
+
+            // Track appearances for matches_played + espn_id
+            if (!playerAppearances[pid]) playerAppearances[pid] = { espnId: '', espnPosition: '', count: 0 }
+            playerAppearances[pid].count++
+            if (rp.espnId) playerAppearances[pid].espnId = rp.espnId
+            if (rp.started && rp.position && rp.position !== 'SUB') {
+              playerAppearances[pid].espnPosition = rp.position
+            }
+
+            // Get events for this player
+            const pe = playerEvents[`${team}|${rp.name}`] || {
+              goals: [], assists: [], yellowMinute: null, redMinute: null,
+              subInMinute: null, subOutMinute: null, replacing: null, replacedBy: null,
+            }
+
+            // Resolve replaced_player_id
+            let replacedPlayerId: number | null = null
+            const replacingName = rp.subbedInForName || pe.replacing
+            if (replacingName) {
+              replacedPlayerId = matchPlayer(replacingName, team, teamPlayers)
+            }
+
+            // Insert player_matches row
+            if (gameId) {
+              const pmRow = {
+                player_id: pid,
+                game_id: gameId,
+                started: rp.started,
+                subbed_in: rp.subbedIn,
+                subbed_out: rp.subbedOut,
+                sub_minute: pe.subInMinute || pe.subOutMinute || null,
+                replaced_player_id: replacedPlayerId,
+                position: (rp.started && rp.position !== 'SUB') ? rp.position : null,
+                goals: pe.goals.length > 0 ? JSON.stringify(pe.goals) : '[]',
+                assists: pe.assists.length > 0 ? JSON.stringify(pe.assists) : '[]',
+                yellow_card: pe.yellowMinute,
+                red_card: pe.redMinute,
+                formation_place: rp.formationPlace || null,
+              }
+              await supabase.from('player_matches').upsert(pmRow, { onConflict: 'player_id,game_id' })
+            }
+
+            // Aggregate stats for players table update
+            for (const _goal of pe.goals) addStat(pid, rp.name, team, 'goals')
+            for (const _assist of pe.assists) addStat(pid, rp.name, team, 'assists')
+            if (pe.yellowMinute) addStat(pid, rp.name, team, 'yellows')
+            if (pe.redMinute) addStat(pid, rp.name, team, 'reds')
+          }
+        }
+
+        // Also process goal/assist/card events for players not in roster (edge cases like OGs credited weirdly)
+        for (const ev of matchData.events) {
+          if (ev.type === 'goal' && !ev.og) {
+            const teamPlayers = playersByTeam[ev.team] || []
+            const pid = matchPlayer(ev.player, ev.team, teamPlayers)
+            if (pid && !statDeltas[pid]) {
+              // Player had a goal but wasn't matched from roster — add stat
+              addStat(pid, ev.player, ev.team, 'goals')
+            }
+          }
+        }
+
         const score = `${g.home_score}-${g.away_score}`
         logData.games_processed.push({ home: homeTeam, away: awayTeam, result: score })
-
-        // Goals
-        for (const goal of stats.goals) {
-          if (goal.og) continue
-          const team = goal.team
-          const teamPlayers = playersByTeam[team] || []
-          const pid = matchPlayer(goal.player, team, teamPlayers)
-          if (pid) {
-            addStat(pid, goal.player, team, 'goals')
-          } else {
-            unmatchedPlayers.push(`${goal.player} (${team}) [goal]`)
-          }
-        }
-
-        // Assists
-        for (const assist of stats.assists) {
-          const teamPlayers = playersByTeam[assist.team] || []
-          const pid = matchPlayer(assist.player, assist.team, teamPlayers)
-          if (pid) {
-            addStat(pid, assist.player, assist.team, 'assists')
-          } else {
-            unmatchedPlayers.push(`${assist.player} (${assist.team}) [assist]`)
-          }
-        }
-
-        // Yellow cards
-        for (const yc of stats.yellows) {
-          const teamPlayers = playersByTeam[yc.team] || []
-          const pid = matchPlayer(yc.player, yc.team, teamPlayers)
-          if (pid) {
-            addStat(pid, yc.player, yc.team, 'yellows')
-          } else {
-            unmatchedPlayers.push(`${yc.player} (${yc.team}) [yellow]`)
-          }
-        }
-
-        // Red cards
-        for (const rc of stats.reds) {
-          const teamPlayers = playersByTeam[rc.team] || []
-          const pid = matchPlayer(rc.player, rc.team, teamPlayers)
-          if (pid) {
-            addStat(pid, rc.player, rc.team, 'reds')
-          } else {
-            unmatchedPlayers.push(`${rc.player} (${rc.team}) [red]`)
-          }
-        }
-
         processedGames.add(gameKey)
       }
 
-      // ── Step 6: Write aggregated stats to DB ──────────────────────────
+      // ── Step 6: Write aggregated stats + appearances to players ───────
       let playerUpdates = 0
       for (const [pidStr, delta] of Object.entries(statDeltas)) {
         const pid = Number(pidStr)
         const player = allPlayers.find(p => p.id === pid)
         if (!player) continue
 
-        const updates: Record<string, number> = {}
+        const updates: Record<string, any> = {}
         if (delta.goals > 0) updates.goals = (player.goals || 0) + delta.goals
         if (delta.assists > 0) updates.assists = (player.assists || 0) + delta.assists
         if (delta.yellows > 0) updates.yellow_cards = (player.yellow_cards || 0) + delta.yellows
@@ -583,7 +712,6 @@ Deno.serve(async (req) => {
         if (Object.keys(updates).length > 0) {
           await supabase.from('players').update(updates).eq('id', pid)
           playerUpdates++
-          // Add to player_stats log
           logData.player_stats.push({
             player: delta.name, team: delta.team,
             ...(delta.goals > 0 ? { goals: delta.goals } : {}),
@@ -593,6 +721,21 @@ Deno.serve(async (req) => {
           })
         }
       }
+
+      // Update matches_played, espn_id, espn_position for all who appeared
+      for (const [pidStr, app] of Object.entries(playerAppearances)) {
+        const pid = Number(pidStr)
+        const player = allPlayers.find(p => p.id === pid)
+        if (!player) continue
+
+        const updates: Record<string, any> = {}
+        updates.matches_played = (player.matches_played || 0) + app.count
+        if (app.espnId && !player.espn_id) updates.espn_id = app.espnId
+        if (app.espnPosition) updates.espn_position = app.espnPosition
+
+        await supabase.from('players').update(updates).eq('id', pid)
+      }
+
       logData.player_updates = playerUpdates
       logData.unmatched = unmatchedPlayers
 
@@ -601,6 +744,7 @@ Deno.serve(async (req) => {
       const totalYellows = Object.values(statDeltas).reduce((s, d) => s + d.yellows, 0)
       const totalReds = Object.values(statDeltas).reduce((s, d) => s + d.reds, 0)
       l(`✓ ${playerUpdates} players updated (${totalGoals}G ${totalAssists}A ${totalYellows}Y ${totalReds}R)`)
+      l(`✓ ${Object.keys(playerAppearances).length} player appearances tracked`)
 
       if (unmatchedPlayers.length > 0) {
         l(`  Unmatched: ${unmatchedPlayers.join(', ')}`)
