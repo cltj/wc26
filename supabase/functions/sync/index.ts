@@ -180,6 +180,27 @@ Deno.serve(async (req) => {
   const log: string[] = []
   const l = (msg: string) => { log.push(msg); console.log(msg) }
 
+  // Determine trigger source
+  let trigger = 'manual'
+  try {
+    const body = await req.clone().json().catch(() => null)
+    if (body?.trigger) trigger = body.trigger
+  } catch { /* ignore */ }
+
+  // Structured log data for sync_logs table
+  const logData = {
+    trigger,
+    games_processed: [] as Array<{ home: string, away: string, result: string }>,
+    player_stats: [] as Array<{ player: string, team: string, goals?: number, assists?: number, yellows?: number, reds?: number }>,
+    unmatched: [] as string[],
+    schedule_updates: 0,
+    game_updates: 0,
+    player_updates: 0,
+    summary: '',
+    ok: true,
+    error: null as string | null,
+  }
+
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
     const SUPABASE_SVC = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -233,6 +254,7 @@ Deno.serve(async (req) => {
         }
       }
     }
+    logData.schedule_updates = schedUpdates
     l(`✓ ${schedUpdates} schedule rows updated`)
 
     // ── Step 3: Update games table (prediction league) ──────────────────
@@ -250,10 +272,12 @@ Deno.serve(async (req) => {
         if (result !== pg.result) {
           await supabase.from('games').update({ result }).eq('id', pg.id)
           gameUpdates++
+          logData.games_processed.push({ home: pg.home, away: pg.away, result })
           l(`  Game ${pg.id} ${pg.home} vs ${pg.away}: ${pg.result || 'null'} → ${result}`)
         }
       }
     }
+    logData.game_updates = gameUpdates
     l(`✓ ${gameUpdates} game results updated`)
 
     // ── Step 4: Find NEW finished games ─────────────────────────────────
@@ -286,31 +310,27 @@ Deno.serve(async (req) => {
       }
 
       // ── Step 5: Fetch player stats from ESPN ──────────────────────────
-      // Collect unique match dates from new games to query ESPN scoreboard
       const matchDates = new Set<string>()
       for (const g of newFinished) {
-        // worldcup26.ir date format: "MM/DD/YYYY HH:mm" or similar
         const dateStr = g.local_date || ''
         const m = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/)
-        if (m) matchDates.add(`${m[3]}${m[1]}${m[2]}`) // YYYYMMDD
+        if (m) matchDates.add(`${m[3]}${m[1]}${m[2]}`)
       }
 
-      // Build ESPN event lookup: sbTeamKey → espnEventId
       const espnEvents: Record<string, string> = {}
       for (const dateStr of matchDates) {
         const events = await espnScoreboard(dateStr)
         for (const ev of events) {
           espnEvents[`${ev.home}|${ev.away}`] = ev.id
-          // Also store reverse in case ESPN swaps home/away
           espnEvents[`${ev.away}|${ev.home}`] = ev.id
         }
       }
       l(`  Found ${Object.keys(espnEvents).length / 2} ESPN events for ${matchDates.size} dates`)
 
       // Aggregate stats per player across all new games
-      const statDeltas: Record<number, { goals: number, assists: number, yellows: number, reds: number, name: string }> = {}
-      const addStat = (pid: number, name: string, field: 'goals'|'assists'|'yellows'|'reds') => {
-        if (!statDeltas[pid]) statDeltas[pid] = { goals: 0, assists: 0, yellows: 0, reds: 0, name }
+      const statDeltas: Record<number, { goals: number, assists: number, yellows: number, reds: number, name: string, team: string }> = {}
+      const addStat = (pid: number, name: string, team: string, field: 'goals'|'assists'|'yellows'|'reds') => {
+        if (!statDeltas[pid]) statDeltas[pid] = { goals: 0, assists: 0, yellows: 0, reds: 0, name, team }
         statDeltas[pid][field]++
       }
 
@@ -331,14 +351,18 @@ Deno.serve(async (req) => {
         l(`  Processing ${homeTeam} vs ${awayTeam} (ESPN ${espnId})...`)
         const stats = await espnMatchStats(espnId)
 
+        // Add to games_processed log
+        const score = `${g.home_score}-${g.away_score}`
+        logData.games_processed.push({ home: homeTeam, away: awayTeam, result: score })
+
         // Goals
         for (const goal of stats.goals) {
-          if (goal.og) continue // own goals don't count for the scorer
+          if (goal.og) continue
           const team = goal.team
           const teamPlayers = playersByTeam[team] || []
           const pid = matchPlayer(goal.player, team, teamPlayers)
           if (pid) {
-            addStat(pid, goal.player, 'goals')
+            addStat(pid, goal.player, team, 'goals')
           } else {
             unmatchedPlayers.push(`${goal.player} (${team}) [goal]`)
           }
@@ -349,7 +373,7 @@ Deno.serve(async (req) => {
           const teamPlayers = playersByTeam[assist.team] || []
           const pid = matchPlayer(assist.player, assist.team, teamPlayers)
           if (pid) {
-            addStat(pid, assist.player, 'assists')
+            addStat(pid, assist.player, assist.team, 'assists')
           } else {
             unmatchedPlayers.push(`${assist.player} (${assist.team}) [assist]`)
           }
@@ -360,7 +384,7 @@ Deno.serve(async (req) => {
           const teamPlayers = playersByTeam[yc.team] || []
           const pid = matchPlayer(yc.player, yc.team, teamPlayers)
           if (pid) {
-            addStat(pid, yc.player, 'yellows')
+            addStat(pid, yc.player, yc.team, 'yellows')
           } else {
             unmatchedPlayers.push(`${yc.player} (${yc.team}) [yellow]`)
           }
@@ -371,7 +395,7 @@ Deno.serve(async (req) => {
           const teamPlayers = playersByTeam[rc.team] || []
           const pid = matchPlayer(rc.player, rc.team, teamPlayers)
           if (pid) {
-            addStat(pid, rc.player, 'reds')
+            addStat(pid, rc.player, rc.team, 'reds')
           } else {
             unmatchedPlayers.push(`${rc.player} (${rc.team}) [red]`)
           }
@@ -396,8 +420,18 @@ Deno.serve(async (req) => {
         if (Object.keys(updates).length > 0) {
           await supabase.from('players').update(updates).eq('id', pid)
           playerUpdates++
+          // Add to player_stats log
+          logData.player_stats.push({
+            player: delta.name, team: delta.team,
+            ...(delta.goals > 0 ? { goals: delta.goals } : {}),
+            ...(delta.assists > 0 ? { assists: delta.assists } : {}),
+            ...(delta.yellows > 0 ? { yellows: delta.yellows } : {}),
+            ...(delta.reds > 0 ? { reds: delta.reds } : {}),
+          })
         }
       }
+      logData.player_updates = playerUpdates
+      logData.unmatched = unmatchedPlayers
 
       const totalGoals = Object.values(statDeltas).reduce((s, d) => s + d.goals, 0)
       const totalAssists = Object.values(statDeltas).reduce((s, d) => s + d.assists, 0)
@@ -418,6 +452,10 @@ Deno.serve(async (req) => {
     })
     l(`✓ Sync state saved (${processedGames.size} games tracked)`)
 
+    // ── Step 8: Write sync log entry ────────────────────────────────────
+    logData.summary = `${logData.games_processed.length} games, ${logData.player_updates} players (${logData.schedule_updates} schedule updates)`
+    await supabase.from('sync_logs').insert(logData)
+
     l('✓ Sync complete')
     return new Response(
       JSON.stringify({ ok: true, log }),
@@ -426,6 +464,18 @@ Deno.serve(async (req) => {
 
   } catch (err: any) {
     l(`✗ Error: ${err.message}`)
+
+    // Log the error too
+    try {
+      const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+      const SUPABASE_SVC = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SVC)
+      logData.ok = false
+      logData.error = err.message
+      logData.summary = `Error: ${err.message}`
+      await supabase.from('sync_logs').insert(logData)
+    } catch { /* ignore logging error */ }
+
     return new Response(
       JSON.stringify({ ok: false, log, error: err.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
