@@ -113,7 +113,7 @@
   <div class="page-header">
     <div class="tourn-label">FIFA World Cup 2026</div>
     <h1>Prediction <span>League</span></h1>
-    <div class="subtitle">Eivind · Mari · Benny · Martin · TJ · Helle</div>
+    <div class="subtitle" id="subtitle">Loading...</div>
   </div>
 
   <section style="margin-bottom:40px">
@@ -153,6 +153,7 @@ async function load() {
   scheduleData = sched;
   teams.forEach(t => teamData[t.name] = t);
   participants.forEach(p => playerPhotos[p.name] = p.photo_url);
+  document.getElementById('subtitle').textContent = CONTENDERS.join(' · ');
   renderLB(); renderGames();
 }
 
