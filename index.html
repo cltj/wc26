@@ -138,6 +138,8 @@ function renderGames() {
   document.getElementById('games-list').innerHTML = allGames.map(g => {
     const locked = new Date() >= new Date(g.kickoff);
     const ko = isKnockout(g);
+    const groupsDone = allGames.filter(x => x.round === 'group').every(x => x.result);
+    const isSlot = ko && !groupsDone;
     const norway = [g.home,g.away].some(t => t.toLowerCase()==='norway' || t.toLowerCase()==='iraq');
     const kickoff = new Date(g.kickoff);
     const dateStr = kickoff.toLocaleDateString('no-NO',{day:'numeric',month:'short'});
@@ -148,8 +150,6 @@ function renderGames() {
     const awayFlag = FLAG_MAP[awayName] ? FLAG_MAP[awayName]+' ' : '';
     const homeL = homeFlag + homeName + (homeName.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
     const awayL = awayFlag + awayName + (awayName.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
-    const groupsDone = allGames.filter(x => x.round === 'group').every(x => x.result);
-    const isSlot = ko && !groupsDone; // knockout locked until all group games have results
 
     const predsHtml = CONTENDERS.map(name => {
       const p = allPredictions.find(p => p.game_id===g.id && p.participant===name);
