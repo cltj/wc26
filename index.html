@@ -245,27 +245,28 @@ function renderGames() {
 }
 
 // ── Team hover tooltip ────────────────────────────────────────────────────────
-const SCHED_TO_TEAM = {'Korea Republic':'South Korea','Bosnia and Herzegovina':'Bosnia & Herz.','Ivory Coast':"Côte d'Ivoire",'Iran':'IR Iran','Cape Verde':'Cabo Verde','Democratic Republic of the Congo':'DR Congo','Congo DR':'DR Congo','United States':'USA','Turkey':'Türkiye','Czech Republic':'Czechia'};
-function normSched(n) { return SCHED_TO_TEAM[n]||n; }
+const TEAM_ALIAS = {'Korea Republic':'South Korea','Bosnia and Herzegovina':'Bosnia & Herz.','Bosnia-Herzegovina':'Bosnia & Herz.','Ivory Coast':"Côte d'Ivoire",'Iran':'IR Iran','Cape Verde':'Cabo Verde','Democratic Republic of the Congo':'DR Congo','Congo DR':'DR Congo','United States':'USA','Turkey':'Türkiye','Czech Republic':'Czechia'};
+function normTeam(n) { return TEAM_ALIAS[n]||n; }
 
 function teamTipHtml(name) {
-  const t = teamData[name];
+  const canonical = normTeam(name);
+  const t = teamData[canonical];
   if (!t) return '';
-  const flag = FLAG_MAP[name]||'';
+  const flag = FLAG_MAP[canonical]||FLAG_MAP[name]||'';
 
   // Compute stats from schedule
   const matches = scheduleData.filter(m => {
     if (m.status !== 'FT') return false;
-    return normSched(m.home_team)===name || normSched(m.away_team)===name;
+    return normTeam(m.home_team)===canonical || normTeam(m.away_team)===canonical;
   });
   let w=0,d=0,l=0,gf=0,ga=0;
   const recent = [];
   matches.forEach(m => {
-    const isHome = normSched(m.home_team)===name;
+    const isHome = normTeam(m.home_team)===canonical;
     const hs=m.home_score, as=m.away_score;
     const mGf=isHome?hs:as, mGa=isHome?as:hs;
     gf+=mGf; ga+=mGa;
-    const opp = isHome ? normSched(m.away_team) : normSched(m.home_team);
+    const opp = isHome ? normTeam(m.away_team) : normTeam(m.home_team);
     const oppFlag = FLAG_MAP[opp]||'';
     let res;
     if (mGf>mGa) { w++; res='W'; } else if (mGf<mGa) { l++; res='L'; } else { d++; res='D'; }
@@ -287,7 +288,7 @@ function teamTipHtml(name) {
   return `<div class="team-tip">
     <div class="tip-hdr">
       <div class="tip-flag">${flag}</div>
-      <div><div class="tip-name">${name}</div><div class="tip-meta">Group ${t.group_letter} · ${t.confederation||''}</div></div>
+      <div><div class="tip-name">${canonical}</div><div class="tip-meta">Group ${t.group_letter} · ${t.confederation||''}</div></div>
     </div>
     <div class="tip-form">${formHtml}</div>
     <div class="tip-stats">
