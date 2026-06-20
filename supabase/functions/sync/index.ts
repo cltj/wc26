@@ -172,6 +172,11 @@ interface MatchEvent {
   replacing?: string     // for sub_in: who went off
 }
 
+interface MatchStats {
+  home: { team: string, formation: string, stats: Record<string, string | number> }
+  away: { team: string, formation: string, stats: Record<string, string | number> }
+}
+
 interface EspnMatchData {
   lineups: Array<{
     team: string
@@ -186,10 +191,11 @@ interface EspnMatchData {
     starters: Array<{ name: string, short: string, number: string, position: string }>
     substitutes: Array<{ name: string, short: string, number: string, position: string }>
   }>
+  matchStats: MatchStats | null
 }
 
 async function espnMatchData(eventId: string): Promise<EspnMatchData> {
-  const result: EspnMatchData = { lineups: [], events: [], teamLineups: [] }
+  const result: EspnMatchData = { lineups: [], events: [], teamLineups: [], matchStats: null }
   const res = await fetch(`${ESPN_API}/summary?event=${eventId}`)
   if (!res.ok) return result
   const data = await res.json()
@@ -229,6 +235,32 @@ async function espnMatchData(eventId: string): Promise<EspnMatchData> {
     if (team && players.length > 0) {
       result.lineups.push({ team, formation, players })
       result.teamLineups.push({ team, formation, starters: startersList, substitutes: subsList })
+    }
+  }
+
+  // ── Parse boxscore stats ─────────────────────────────────────────────
+  const bsTeams = data.boxscore?.teams || []
+  if (bsTeams.length >= 2) {
+    const STAT_KEYS = ['possessionPct','totalShots','shotsOnTarget','wonCorners','foulsCommitted','offsides','saves','accuratePasses','totalPasses','passPct','totalCrosses','accurateCrosses']
+    const extractStats = (t: any) => {
+      const stats: Record<string, string | number> = {}
+      for (const s of (t.statistics || [])) {
+        if (STAT_KEYS.includes(s.name)) stats[s.name] = s.displayValue ?? s.value
+      }
+      return stats
+    }
+    const t0team = mapEspnTeam(bsTeams[0].team?.displayName || '')
+    const t1team = mapEspnTeam(bsTeams[1].team?.displayName || '')
+    const t0home = bsTeams[0].homeAway === 'home'
+    const homeIdx = t0home ? 0 : 1
+    const awayIdx = t0home ? 1 : 0
+    const homeTeamName = t0home ? t0team : t1team
+    const awayTeamName = t0home ? t1team : t0team
+    const homeFmt = result.lineups.find(l => l.team === homeTeamName)?.formation || ''
+    const awayFmt = result.lineups.find(l => l.team === awayTeamName)?.formation || ''
+    result.matchStats = {
+      home: { team: homeTeamName, formation: homeFmt, stats: extractStats(bsTeams[homeIdx]) },
+      away: { team: awayTeamName, formation: awayFmt, stats: extractStats(bsTeams[awayIdx]) },
     }
   }
 
@@ -587,6 +619,11 @@ Deno.serve(async (req) => {
             last_starting_xi: lu.starters,
             last_substitutes: lu.substitutes,
           }).eq('name', lu.team)
+        }
+
+        // Write match stats to schedule table
+        if (matchData.matchStats && scheduleId) {
+          await supabase.from('schedule').update({ match_stats: matchData.matchStats }).eq('id', scheduleId)
         }
 
         // ── Build player_matches rows ─────────────────────────────────────

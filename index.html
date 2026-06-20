@@ -183,6 +183,23 @@
 .mu-sub-in { color:var(--green); font-size:9px; }
 .mu-subs-hdr { font-size:8px; color:var(--dim); margin-top:6px; margin-bottom:2px; text-transform:uppercase; letter-spacing:.05em; }
 .g-venue { font-size:9px; color:var(--dim); opacity:.7; }
+/* Match stats comparison bars */
+.md-stats { padding:12px 0; }
+.md-stats-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin-bottom:8px; text-align:center; }
+.md-stat-row { display:grid; grid-template-columns:36px 1fr auto 1fr 36px; align-items:center; gap:4px; margin-bottom:6px; font-size:11px; }
+.md-stat-val { font-family:'JetBrains Mono',monospace; font-weight:600; font-size:11px; }
+.md-stat-val.home { text-align:right; }
+.md-stat-val.away { text-align:left; }
+.md-stat-lbl { text-align:center; font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; white-space:nowrap; }
+.md-stat-bar { height:5px; border-radius:3px; background:rgba(255,255,255,.06); overflow:hidden; position:relative; }
+.md-stat-bar.home { direction:rtl; }
+.md-stat-fill { height:100%; border-radius:3px; transition:width .4s; }
+.md-stat-bar.home .md-stat-fill { background:var(--gold); }
+.md-stat-bar.away .md-stat-fill { background:rgba(96,185,122,.6); }
+.md-stat-fill.winner { opacity:1; }
+.md-stat-fill.loser { opacity:.35; }
+.md-formations { display:flex; justify-content:space-between; font-size:11px; color:var(--dim); margin-bottom:8px; }
+.md-formations span { font-family:'JetBrains Mono',monospace; font-weight:600; color:var(--text); }
 </style>
 </head>
 <body>
@@ -696,7 +713,7 @@ async function toggleSchedDetail(schedId) {
     try {
       const rows = await fetchMatchData(schedId);
       if (!rows.length) { panel.innerHTML = matchupHtml(sched.home_team, sched.away_team); return; }
-      panel.innerHTML = matchupHtml(sched.home_team, sched.away_team, rows) + buildTimeline(sched, rows);
+      panel.innerHTML = matchupHtml(sched.home_team, sched.away_team, rows) + buildTimeline(sched, rows) + buildStatsHtml(sched);
     } catch(e) { panel.innerHTML = matchupHtml(sched.home_team, sched.away_team) + '<div class="md-loading">Error loading match data</div>'; }
   } else {
     panel.innerHTML = matchupHtml(sched.home_team, sched.away_team);
@@ -719,8 +736,8 @@ async function loadPredMatchData(gameId, schedId) {
     // Update matchup bar with event badges
     const g = allGames.find(g => g.id === gameId);
     if (muEl && g) muEl.innerHTML = matchupHtml(g.home, g.away, rows);
-    // Show timeline
-    mdEl.innerHTML = buildTimeline(sched, rows);
+    // Show timeline + stats
+    mdEl.innerHTML = buildTimeline(sched, rows) + buildStatsHtml(sched);
   } catch(e) { mdEl.innerHTML = '<div class="md-loading">Error loading data</div>'; }
 }
 
@@ -789,6 +806,51 @@ function buildTimeline(sched, rows) {
   }).join('');
 
   return `<div class="md-timeline" style="margin:12px 0;padding:10px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)">${evHtml}</div>`;
+}
+
+function buildStatsHtml(sched) {
+  const ms = sched.match_stats;
+  if (!ms || !ms.home || !ms.away) return '';
+  const hs = ms.home.stats, as = ms.away.stats;
+
+  const DISPLAY = [
+    ['possessionPct', 'Possession', '%'],
+    ['totalShots', 'Shots', ''],
+    ['shotsOnTarget', 'On Target', ''],
+    ['wonCorners', 'Corners', ''],
+    ['foulsCommitted', 'Fouls', ''],
+    ['offsides', 'Offsides', ''],
+    ['accuratePasses', 'Passes', ''],
+    ['saves', 'Saves', ''],
+  ];
+
+  const rows = DISPLAY.map(([key, label, suffix]) => {
+    const hv = parseFloat(hs[key]) || 0;
+    const av = parseFloat(as[key]) || 0;
+    const total = hv + av || 1;
+    const hPct = (hv / total * 100).toFixed(0);
+    const aPct = (av / total * 100).toFixed(0);
+    const hWin = hv >= av ? 'winner' : 'loser';
+    const aWin = av >= hv ? 'winner' : 'loser';
+    const hDisp = key === 'possessionPct' ? hs[key] + '%' : hs[key];
+    const aDisp = key === 'possessionPct' ? as[key] + '%' : as[key];
+
+    return `<div class="md-stat-row">
+      <div class="md-stat-val home">${hDisp ?? hv}</div>
+      <div class="md-stat-bar home"><div class="md-stat-fill ${hWin}" style="width:${hPct}%"></div></div>
+      <div class="md-stat-lbl">${label}</div>
+      <div class="md-stat-bar away"><div class="md-stat-fill ${aWin}" style="width:${aPct}%"></div></div>
+      <div class="md-stat-val away">${aDisp ?? av}</div>
+    </div>`;
+  }).join('');
+
+  const fmtHome = ms.home.formation ? `<span>${ms.home.formation}</span>` : '';
+  const fmtAway = ms.away.formation ? `<span>${ms.away.formation}</span>` : '';
+
+  return `<div class="md-stats" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+    ${fmtHome || fmtAway ? `<div class="md-formations"><div>${flagFor(sched.home_team)} ${fmtHome}</div><div>Formation</div><div>${fmtAway} ${flagFor(sched.away_team)}</div></div>` : ''}
+    ${rows}
+  </div>`;
 }
 
 load();
