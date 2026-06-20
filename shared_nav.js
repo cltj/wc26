@@ -1,7 +1,6 @@
 // ── Shared nav + login modal injected into every page ────────────────────────
 const NAV_PAGES = [
   { href:'index.html',    label:'⚽ League',    key:'index'    },
-  { href:'schedule.html', label:'📅 Schedule',  key:'schedule' },
   { href:'groups.html',   label:'🗂 Groups',    key:'groups'   },
   { href:'bracket.html',  label:'🏆 Bracket',   key:'bracket'  },
   { href:'teams.html',    label:'🌍 Teams',     key:'teams'    },

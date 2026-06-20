@@ -57,6 +57,48 @@
 .game-card.open .toggle-arrow { transform: rotate(180deg); }
 .round-sep { font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:1px; color:var(--gold); padding:24px 0 8px; border-bottom:1px solid rgba(255,255,255,0.06); margin-bottom:10px; }
 .game-card.knockout { border-left:3px solid rgba(240,180,41,0.3); }
+
+/* Date nav */
+.date-nav { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px; }
+.date-btn {
+  background:var(--card); border:1px solid var(--border); border-radius:7px;
+  color:var(--dim); font-size:11px; font-weight:600; padding:6px 10px;
+  cursor:pointer; font-family:'Inter',sans-serif; transition:all .15s;
+  text-align:center; line-height:1.3;
+}
+.date-btn:hover { border-color:var(--gold); color:var(--white); }
+.date-btn.active { background:rgba(240,180,41,.12); border-color:var(--gold); color:var(--gold); }
+.date-btn .dow { display:block; font-size:9px; letter-spacing:.06em; text-transform:uppercase; opacity:.7; }
+.date-btn .day { display:block; font-family:'Bebas Neue',sans-serif; font-size:18px; line-height:1; }
+.day-title {
+  font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:.06em;
+  color:var(--gold); margin-bottom:10px; margin-top:24px; display:flex; align-items:center; gap:10px;
+}
+.day-title::after { content:''; flex:1; height:1px; background:var(--border); }
+/* Simple schedule card (non-prediction) */
+.sched-card {
+  background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden;
+}
+.sched-card.norway { border-left:3px solid var(--norway); }
+.sched-row {
+  display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
+  gap:10px; padding:10px 14px;
+}
+.s-team { display:flex; align-items:center; gap:6px; font-weight:600; font-size:12px; }
+.s-team.home { justify-content:flex-end; text-align:right; }
+.s-flag { font-size:18px; line-height:1; }
+.s-score {
+  font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700;
+  min-width:50px; text-align:center; padding:3px 8px; border-radius:5px;
+  background:rgba(255,255,255,.04);
+}
+.s-score.ft { background:rgba(240,180,41,.1); color:var(--gold); }
+.s-score.sched { color:var(--dim); font-size:11px; font-weight:500; font-family:'Inter',sans-serif; }
+.sched-meta {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:0 14px 8px; font-size:9px; color:var(--dim);
+}
+.s-group { font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
 .g-team-link { cursor:pointer; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.15); text-underline-offset:3px; }
 .g-team-link:hover { text-decoration-color:var(--gold); }
 .team-popup-overlay { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.6); justify-content:center; align-items:center; }
@@ -123,6 +165,7 @@
 
   <section>
     <div class="section-title">Games</div>
+    <div class="date-nav" id="date-nav"></div>
     <div class="games-list" id="games-list"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
   </section>
 </div>
@@ -140,12 +183,22 @@ const rankClass = ['rank-1','rank-2','rank-3','rank-4','rank-5','rank-6','rank-7
 const ROUND_LABELS = {group:'Group',R32:'Round of 32',R16:'Round of 16',QF:'Quarter-final',SF:'Semi-final','3rd':'3rd Place',F:'Final'};
 let allGames = [], allPredictions = [], teamData = {}, scheduleData = [], playerPhotos = {};
 
+const TEAM_ALIAS = {'Korea Republic':'South Korea','Bosnia and Herzegovina':'Bosnia & Herz.','Bosnia-Herzegovina':'Bosnia & Herz.','Ivory Coast':"Côte d'Ivoire",'Iran':'IR Iran','Cape Verde':'Cabo Verde','Democratic Republic of the Congo':'DR Congo','Congo DR':'DR Congo','United States':'USA','Turkey':'Türkiye','Czech Republic':'Czechia'};
+function normTeam(n) { return TEAM_ALIAS[n]||n; }
+
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(d) { const dt = new Date(d+'T00:00:00'); return `${DOW[dt.getDay()]} ${dt.getDate()} ${MONTHS[dt.getMonth()]}`; }
+function fmtTime(t) { if (!t) return ''; const [h,m] = t.split(':'); return `${h}:${m}`; }
+function flagFor(team) { return FLAG_MAP[team] || FLAG_MAP[TEAM_ALIAS[team]] || ''; }
+function scrollToDate(date) { const el = document.getElementById('day-'+date); if (el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+
 async function load() {
   const [games, preds, teams, sched, participants] = await Promise.all([
     sb('games?select=*&order=id'),
     sb('predictions?select=*'),
     sb('teams?select=name,group_letter,confederation,last_formation,last_starting_xi&order=name'),
-    sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id'),
+    sb('schedule?select=*&order=match_date,kickoff_time,id'),
     sb('participants?select=name,photo_url'),
   ]);
   allGames = games;
@@ -191,99 +244,180 @@ function badgeHtml(game, pred) {
   return `<span class="badge badge-0">✗ 0 pts</span>`;
 }
 
-function renderGames() {
+// Build a lookup: "normHome|normAway" -> game object (for matching schedule to prediction games)
+function buildGameLookup() {
+  const lookup = {};
+  allGames.forEach(g => {
+    const h = normTeam(g.home), a = normTeam(g.away);
+    lookup[`${h}|${a}`] = g;
+    lookup[`${a}|${h}`] = g;
+  });
+  return lookup;
+}
+
+function renderPredGame(g) {
   const user = getUser();
-  // Group games by round
-  const roundOrder = ['group','R32','R16','QF','SF','3rd','F'];
-  let currentRound = '';
+  const ko = isKnockout(g);
+  const groupsDone = allGames.filter(x => x.round === 'group').every(x => x.result);
+  const teamsKnown = !ko || (groupsDone && g.home_slot !== g.home && g.away_slot !== g.away);
+  const isSlot = ko && !teamsKnown;
+  const locked = new Date() >= new Date(g.kickoff) || isSlot;
+  const norway = [g.home,g.away].some(t => t.toLowerCase()==='norway' || t.toLowerCase()==='iraq');
+  const kickoff = new Date(g.kickoff);
+  const timeStr = kickoff.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'});
+  const homeName = isSlot && g.home_slot ? g.home_slot : g.home;
+  const awayName = isSlot && g.away_slot ? g.away_slot : g.away;
+  const homeFlag = FLAG_MAP[homeName] ? FLAG_MAP[homeName]+' ' : '';
+  const awayFlag = FLAG_MAP[awayName] ? FLAG_MAP[awayName]+' ' : '';
+  const homeL = homeFlag + homeName + (homeName.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
+  const awayL = awayFlag + awayName + (awayName.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
 
-  document.getElementById('games-list').innerHTML = allGames.map(g => {
-    const ko = isKnockout(g);
-    const groupsDone = allGames.filter(x => x.round === 'group').every(x => x.result);
-    const teamsKnown = !ko || (groupsDone && g.home_slot !== g.home && g.away_slot !== g.away);
-    const isSlot = ko && !teamsKnown;
-    const locked = new Date() >= new Date(g.kickoff) || isSlot;
-    const norway = [g.home,g.away].some(t => t.toLowerCase()==='norway' || t.toLowerCase()==='iraq');
-    const kickoff = new Date(g.kickoff);
-    const dateStr = kickoff.toLocaleDateString('no-NO',{day:'numeric',month:'short'});
-    const timeStr = kickoff.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'});
-    const homeName = isSlot && g.home_slot ? g.home_slot : g.home;
-    const awayName = isSlot && g.away_slot ? g.away_slot : g.away;
-    const homeFlag = FLAG_MAP[homeName] ? FLAG_MAP[homeName]+' ' : '';
-    const awayFlag = FLAG_MAP[awayName] ? FLAG_MAP[awayName]+' ' : '';
-    const homeL = homeFlag + homeName + (homeName.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
-    const awayL = awayFlag + awayName + (awayName.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
-
-    const predsHtml = CONTENDERS.map(name => {
-      const p = allPredictions.find(p => p.game_id===g.id && p.participant===name);
-      let winnerBadge = '';
-      if (ko && p?.prediction && isDraw(p.prediction) && p.winner) {
-        winnerBadge = `<div style="font-size:9px;color:var(--dim);margin-top:2px">⚔ ${p.winner}</div>`;
-      }
-      return `<div class="pred-cell">
-        <div class="pred-name">${name}</div>
-        <div class="pred-score ${p?.prediction?'':'empty'}">${p?.prediction||'—'}</div>
-        ${winnerBadge}
-        ${g.result ? badgeHtml(g, p) : (p&&isValidScore(p.prediction)?'<span class="badge badge-t">Tipped ✓</span>':'')}
-      </div>`;
-    }).join('');
-
-    let inputHtml = '';
-    if (user && !isSlot) {
-      const myP = allPredictions.find(p => p.game_id===g.id && p.participant===user);
-      if (locked) {
-        inputHtml = `<div class="pred-inp-row"><span class="locked-msg">🔒 Locked — game has started</span></div>`;
-      } else {
-        const myVal = myP?.prediction || '';
-        const showWinner = ko && isDraw(myVal);
-        inputHtml = `<div class="pred-inp-row">
-            <label>Your tip:</label>
-            <input class="inp pred-inp" id="inp-${g.id}" placeholder="e.g. 2-1" maxlength="6" value="${myVal}" oninput="toggleWinnerPick(${g.id})">
-            <button class="btn btn-gold" style="padding:7px 14px;font-size:12px" onclick="savePred(${g.id})">Save</button>
-            <span class="save-msg" id="msg-${g.id}" style="color:var(--green)">Saved ✓</span>
-          </div>
-          ${ko ? `<div class="pred-inp-row" id="winner-row-${g.id}" style="display:${showWinner?'flex':'none'}">
-            <label>Who advances?</label>
-            <select class="inp" id="winner-${g.id}" style="font-size:12px;padding:6px 8px">
-              <option value="">Pick…</option>
-              <option value="${g.home}"${myP?.winner===g.home?' selected':''}>${homeFlag}${g.home}</option>
-              <option value="${g.away}"${myP?.winner===g.away?' selected':''}>${awayFlag}${g.away}</option>
-            </select>
-          </div>` : ''}`;
-      }
-    } else if (isSlot) {
-      const slotMsg = !groupsDone ? 'Opens when group stage is finished' : 'Opens when matchup is determined';
-      inputHtml = `<div class="pred-inp-row"><span class="locked-msg" style="color:var(--dim)">⏳ ${slotMsg}</span></div>`;
+  const predsHtml = CONTENDERS.map(name => {
+    const p = allPredictions.find(p => p.game_id===g.id && p.participant===name);
+    let winnerBadge = '';
+    if (ko && p?.prediction && isDraw(p.prediction) && p.winner) {
+      winnerBadge = `<div style="font-size:9px;color:var(--dim);margin-top:2px">⚔ ${p.winner}</div>`;
     }
-
-    // Round separator
-    let separator = '';
-    if (g.round !== currentRound) {
-      currentRound = g.round;
-      separator = `<div class="round-sep">${ROUND_LABELS[g.round] || g.round}</div>`;
-    }
-
-    return `${separator}<div class="game-card${norway?' norway':''}${ko?' knockout':''}" id="gc-${g.id}">
-      <div class="game-hdr" onclick="toggleGame(${g.id})">
-        <div class="g-num">${g.id}</div>
-        <div class="g-team home">${teamData[normTeam(homeName)] ? `<span class="g-team-link" onclick="showTeamPopup('${homeName.replace(/'/g,"\\'")}',event)">${homeL}</span>` : homeL}</div>
-        <div class="g-score ${g.result?'done':'pending'}">${g.result||'vs'}</div>
-        <div class="g-team">${teamData[normTeam(awayName)] ? `<span class="g-team-link" onclick="showTeamPopup('${awayName.replace(/'/g,"\\'")}',event)">${awayL}</span>` : awayL}</div>
-        <div class="g-meta">${dateStr} ${timeStr}<br>${locked?'<span class="lock-pill">LOCKED</span>':'<span class="open-pill">OPEN</span>'} <span class="toggle-arrow">▼</span></div>
-      </div>
-      <div class="preds-panel" id="pp-${g.id}">
-        ${!isSlot ? matchupHtml(homeName, awayName) : ''}
-        <div class="preds-grid">${predsHtml}</div>
-        ${inputHtml}
-      </div>
+    return `<div class="pred-cell">
+      <div class="pred-name">${name}</div>
+      <div class="pred-score ${p?.prediction?'':'empty'}">${p?.prediction||'—'}</div>
+      ${winnerBadge}
+      ${g.result ? badgeHtml(g, p) : (p&&isValidScore(p.prediction)?'<span class="badge badge-t">Tipped ✓</span>':'')}
     </div>`;
   }).join('');
+
+  let inputHtml = '';
+  if (user && !isSlot) {
+    const myP = allPredictions.find(p => p.game_id===g.id && p.participant===user);
+    if (locked) {
+      inputHtml = `<div class="pred-inp-row"><span class="locked-msg">🔒 Locked — game has started</span></div>`;
+    } else {
+      const myVal = myP?.prediction || '';
+      const showWinner = ko && isDraw(myVal);
+      inputHtml = `<div class="pred-inp-row">
+          <label>Your tip:</label>
+          <input class="inp pred-inp" id="inp-${g.id}" placeholder="e.g. 2-1" maxlength="6" value="${myVal}" oninput="toggleWinnerPick(${g.id})">
+          <button class="btn btn-gold" style="padding:7px 14px;font-size:12px" onclick="savePred(${g.id})">Save</button>
+          <span class="save-msg" id="msg-${g.id}" style="color:var(--green)">Saved ✓</span>
+        </div>
+        ${ko ? `<div class="pred-inp-row" id="winner-row-${g.id}" style="display:${showWinner?'flex':'none'}">
+          <label>Who advances?</label>
+          <select class="inp" id="winner-${g.id}" style="font-size:12px;padding:6px 8px">
+            <option value="">Pick…</option>
+            <option value="${g.home}"${myP?.winner===g.home?' selected':''}>${homeFlag}${g.home}</option>
+            <option value="${g.away}"${myP?.winner===g.away?' selected':''}>${awayFlag}${g.away}</option>
+          </select>
+        </div>` : ''}`;
+    }
+  } else if (isSlot) {
+    const slotMsg = !groupsDone ? 'Opens when group stage is finished' : 'Opens when matchup is determined';
+    inputHtml = `<div class="pred-inp-row"><span class="locked-msg" style="color:var(--dim)">⏳ ${slotMsg}</span></div>`;
+  }
+
+  const roundLabel = g.round && g.round !== 'group' ? `<span style="font-size:9px;font-weight:700;color:var(--gold);letter-spacing:.05em;text-transform:uppercase;margin-left:4px">${ROUND_LABELS[g.round]||g.round}</span>` : '';
+
+  return `<div class="game-card${norway?' norway':''}${ko?' knockout':''}" id="gc-${g.id}">
+    <div class="game-hdr" onclick="toggleGame(${g.id})">
+      <div class="g-num">${g.id}</div>
+      <div class="g-team home">${teamData[normTeam(homeName)] ? `<span class="g-team-link" onclick="showTeamPopup('${homeName.replace(/'/g,"\\'")}',event)">${homeL}</span>` : homeL}</div>
+      <div class="g-score ${g.result?'done':'pending'}">${g.result||timeStr}</div>
+      <div class="g-team">${teamData[normTeam(awayName)] ? `<span class="g-team-link" onclick="showTeamPopup('${awayName.replace(/'/g,"\\'")}',event)">${awayL}</span>` : awayL}</div>
+      <div class="g-meta">${roundLabel}${locked?'<span class="lock-pill">LOCKED</span>':'<span class="open-pill">OPEN</span>'} <span class="toggle-arrow">▼</span></div>
+    </div>
+    <div class="preds-panel" id="pp-${g.id}">
+      ${!isSlot ? matchupHtml(homeName, awayName) : ''}
+      <div class="preds-grid">${predsHtml}</div>
+      ${inputHtml}
+    </div>
+  </div>`;
+}
+
+function renderSchedCard(m) {
+  const nor = m.home_team === 'Norway' || m.away_team === 'Norway';
+  const isFt = m.status === 'FT';
+  const scoreText = isFt ? `${m.home_score} - ${m.away_score}` : (m.kickoff_time ? fmtTime(m.kickoff_time) : 'TBD');
+  return `<div class="sched-card${nor ? ' norway' : ''}">
+    <div class="sched-row">
+      <div class="s-team home"><span>${m.home_team}</span> <span class="s-flag">${flagFor(m.home_team)}</span></div>
+      <div class="s-score ${isFt ? 'ft' : 'sched'}">${scoreText}</div>
+      <div class="s-team"><span class="s-flag">${flagFor(m.away_team)}</span> <span>${m.away_team}</span></div>
+    </div>
+    <div class="sched-meta"><span class="s-group">${m.group_name||''}</span><span>${m.stadium ? m.stadium+', '+m.city : ''}</span></div>
+  </div>`;
+}
+
+function renderGames() {
+  const gameLookup = buildGameLookup();
+
+  // Group schedule by date
+  const byDate = {};
+  scheduleData.forEach(m => {
+    if (!byDate[m.match_date]) byDate[m.match_date] = [];
+    byDate[m.match_date].push(m);
+  });
+
+  // Also add prediction games that aren't in schedule (knockout slots etc)
+  const schedTeamKeys = new Set();
+  scheduleData.forEach(m => {
+    schedTeamKeys.add(`${normTeam(m.home_team)}|${normTeam(m.away_team)}`);
+    schedTeamKeys.add(`${normTeam(m.away_team)}|${normTeam(m.home_team)}`);
+  });
+  const unmatchedGames = allGames.filter(g => {
+    const key = `${normTeam(g.home)}|${normTeam(g.away)}`;
+    return !schedTeamKeys.has(key);
+  });
+  unmatchedGames.forEach(g => {
+    const d = g.kickoff ? g.kickoff.slice(0,10) : '9999-99-99';
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push({_predGame: g});
+  });
+
+  const dates = Object.keys(byDate).sort();
+  const today = new Date().toISOString().slice(0,10);
+
+  // Date nav
+  document.getElementById('date-nav').innerHTML = dates.map(d => {
+    const dt = new Date(d+'T00:00:00');
+    const isToday = d === today;
+    return `<button class="date-btn${isToday?' active':''}" onclick="scrollToDate('${d}')">
+      <span class="dow">${DOW[dt.getDay()]}</span>
+      <span class="day">${dt.getDate()}</span>
+    </button>`;
+  }).join('');
+
+  // Render day sections — track rendered prediction game IDs to avoid duplicates
+  const renderedGameIds = new Set();
+  document.getElementById('games-list').innerHTML = dates.map(date => {
+    const items = byDate[date];
+    const cardsHtml = items.map(m => {
+      // Check if this is an unmatched prediction game injected directly
+      if (m._predGame) { renderedGameIds.add(m._predGame.id); return renderPredGame(m._predGame); }
+
+      // Check if this schedule match has a corresponding prediction game
+      const h = normTeam(m.home_team), a = normTeam(m.away_team);
+      const game = gameLookup[`${h}|${a}`];
+      if (game && !renderedGameIds.has(game.id)) { renderedGameIds.add(game.id); return renderPredGame(game); }
+      if (game && renderedGameIds.has(game.id)) return ''; // already rendered
+
+      // Plain schedule card
+      return renderSchedCard(m);
+    }).join('');
+
+    return `<div class="day-section" id="day-${date}">
+      <div class="day-title">${fmtDate(date)}${date===today?' &mdash; Today':''}</div>
+      ${cardsHtml}
+    </div>`;
+  }).join('');
+
+  // Auto-scroll to today
+  if (byDate[today]) {
+    setTimeout(() => {
+      document.getElementById('day-'+today)?.scrollIntoView({behavior:'smooth',block:'start'});
+    }, 100);
+  }
 }
 
 // ── Team helpers ──────────────────────────────────────────────────────────────
-const TEAM_ALIAS = {'Korea Republic':'South Korea','Bosnia and Herzegovina':'Bosnia & Herz.','Bosnia-Herzegovina':'Bosnia & Herz.','Ivory Coast':"Côte d'Ivoire",'Iran':'IR Iran','Cape Verde':'Cabo Verde','Democratic Republic of the Congo':'DR Congo','Congo DR':'DR Congo','United States':'USA','Turkey':'Türkiye','Czech Republic':'Czechia'};
-function normTeam(n) { return TEAM_ALIAS[n]||n; }
-
 function teamSideHtml(name) {
   const canonical = normTeam(name);
   const t = teamData[canonical];
