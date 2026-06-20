@@ -135,22 +135,24 @@
 <script src="shared_nav.js"></script>
 <script>
 injectNav('index');
-const rankLabel = ['🥇 1st','🥈 2nd','🥉 3rd','4th','5th','6th'];
-const rankClass = ['rank-1','rank-2','rank-3','rank-4','rank-5','rank-6'];
+const rankLabel = ['🥇 1st','🥈 2nd','🥉 3rd','4th','5th','6th','7th'];
+const rankClass = ['rank-1','rank-2','rank-3','rank-4','rank-5','rank-6','rank-7'];
 const ROUND_LABELS = {group:'Group',R32:'Round of 32',R16:'Round of 16',QF:'Quarter-final',SF:'Semi-final','3rd':'3rd Place',F:'Final'};
-let allGames = [], allPredictions = [], teamData = {}, scheduleData = [];
+let allGames = [], allPredictions = [], teamData = {}, scheduleData = [], playerPhotos = {};
 
 async function load() {
-  const [games, preds, teams, sched] = await Promise.all([
+  const [games, preds, teams, sched, participants] = await Promise.all([
     sb('games?select=*&order=id'),
     sb('predictions?select=*'),
     sb('teams?select=name,group_letter,confederation,last_formation,last_starting_xi&order=name'),
     sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id'),
+    sb('participants?select=name,photo_url'),
   ]);
   allGames = games;
   allPredictions = preds;
   scheduleData = sched;
   teams.forEach(t => teamData[t.name] = t);
+  participants.forEach(p => playerPhotos[p.name] = p.photo_url);
   renderLB(); renderGames();
 }
 
@@ -159,7 +161,7 @@ function renderLB() {
   document.getElementById('lb-grid').innerHTML = lb.map(([name, s], i) => `
     <div class="lb-card ${rankClass[i]||''}">
       <div style="position:relative">
-        <img class="lb-photo" src="${PLAYER_PHOTOS[name]}" alt="${name}" loading="lazy"
+        <img class="lb-photo" src="${playerPhotos[name] || BASE_URL+'/placeholder.jpg'}" alt="${name}" loading="lazy"
           onerror="this.src='${BASE_URL}/placeholder.jpg'">
         <span class="lb-ribbon">${rankLabel[i]||''}</span>
       </div>

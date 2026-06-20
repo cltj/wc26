@@ -27,15 +27,7 @@ const FLAG_MAP = {
   'Democratic Republic of the Congo':'🇨🇩',
 };
 
-const PLAYER_PHOTOS = {
-  'Eivind': `${BASE_URL}/eivind.jpeg`,
-  'TJ':     `${BASE_URL}/tj.jpg`,
-  'Mari':   `${BASE_URL}/mari.jpeg`,
-  'Benny':  `${BASE_URL}/placeholder.jpg`,
-  'Martin': `${BASE_URL}/martin.png`,
-  'Helle':  `${BASE_URL}/helle.jpeg`,
-  'Øyvind': `${BASE_URL}/placeholder.jpg`,
-};
+// PLAYER_PHOTOS now loaded from participants table (photo_url column)
 
 // ── Supabase helpers ─────────────────────────────────────────────────────────
 async function sb(path, opts={}) {
