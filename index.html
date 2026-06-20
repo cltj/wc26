@@ -57,6 +57,27 @@
 .game-card.open .toggle-arrow { transform: rotate(180deg); }
 .round-sep { font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:1px; color:var(--gold); padding:24px 0 8px; border-bottom:1px solid rgba(255,255,255,0.06); margin-bottom:10px; }
 .game-card.knockout { border-left:3px solid rgba(240,180,41,0.3); }
+.g-team { position:relative; }
+.team-tip { display:none; position:absolute; z-index:100; width:240px; background:#0e2718; border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:12px; box-shadow:0 8px 24px rgba(0,0,0,.5); pointer-events:none; top:100%; margin-top:6px; }
+.g-team.home .team-tip { right:0; }
+.g-team:not(.home) .team-tip { left:0; }
+.g-team:hover .team-tip { display:block; }
+.tip-hdr { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.tip-flag { font-size:22px; }
+.tip-name { font-weight:700; font-size:13px; }
+.tip-meta { font-size:10px; color:var(--dim); }
+.tip-form { display:flex; gap:3px; margin-bottom:8px; }
+.tip-dot { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; }
+.tip-dot.w { background:rgba(96,185,122,.2); color:var(--green); }
+.tip-dot.d { background:rgba(240,180,41,.15); color:var(--gold); }
+.tip-dot.l { background:rgba(224,52,52,.15); color:#e07070; }
+.tip-dot.u { background:rgba(255,255,255,.05); color:var(--dim); }
+.tip-stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1px; background:rgba(255,255,255,0.06); border-radius:6px; overflow:hidden; }
+.tip-stat { background:#0e2718; text-align:center; padding:6px 4px; }
+.tip-stat-val { font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600; }
+.tip-stat-lbl { font-size:8px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; margin-top:1px; }
+.tip-matches { margin-top:8px; font-size:10px; color:var(--dim); line-height:1.6; }
+.tip-match-result { font-family:'JetBrains Mono',monospace; font-weight:600; color:var(--text); }
 </style>
 </head>
 <body>
@@ -85,13 +106,19 @@ injectNav('index');
 const rankLabel = ['🥇 1st','🥈 2nd','🥉 3rd','4th','5th','6th'];
 const rankClass = ['rank-1','rank-2','rank-3','rank-4','rank-5','rank-6'];
 const ROUND_LABELS = {group:'Group',R32:'Round of 32',R16:'Round of 16',QF:'Quarter-final',SF:'Semi-final','3rd':'3rd Place',F:'Final'};
-let allGames = [], allPredictions = [];
+let allGames = [], allPredictions = [], teamData = {}, scheduleData = [];
 
 async function load() {
-  [allGames, allPredictions] = await Promise.all([
+  const [games, preds, teams, sched] = await Promise.all([
     sb('games?select=*&order=id'),
-    sb('predictions?select=*')
+    sb('predictions?select=*'),
+    sb('teams?select=name,group_letter,confederation&order=name'),
+    sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id'),
   ]);
+  allGames = games;
+  allPredictions = preds;
+  scheduleData = sched;
+  teams.forEach(t => teamData[t.name] = t);
   renderLB(); renderGames();
 }
 
@@ -204,9 +231,9 @@ function renderGames() {
     return `${separator}<div class="game-card${norway?' norway':''}${ko?' knockout':''}" id="gc-${g.id}">
       <div class="game-hdr" onclick="toggleGame(${g.id})">
         <div class="g-num">${g.id}</div>
-        <div class="g-team home">${homeL}</div>
+        <div class="g-team home">${homeL}${teamTipHtml(homeName)}</div>
         <div class="g-score ${g.result?'done':'pending'}">${g.result||'vs'}</div>
-        <div class="g-team">${awayL}</div>
+        <div class="g-team">${awayL}${teamTipHtml(awayName)}</div>
         <div class="g-meta">${dateStr} ${timeStr}<br>${locked?'<span class="lock-pill">LOCKED</span>':'<span class="open-pill">OPEN</span>'} <span class="toggle-arrow">▼</span></div>
       </div>
       <div class="preds-panel" id="pp-${g.id}">
@@ -215,6 +242,61 @@ function renderGames() {
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Team hover tooltip ────────────────────────────────────────────────────────
+const SCHED_TO_TEAM = {'Korea Republic':'South Korea','Bosnia and Herzegovina':'Bosnia & Herz.','Ivory Coast':"Côte d'Ivoire",'Iran':'IR Iran','Cape Verde':'Cabo Verde','Democratic Republic of the Congo':'DR Congo','Congo DR':'DR Congo','United States':'USA','Turkey':'Türkiye','Czech Republic':'Czechia'};
+function normSched(n) { return SCHED_TO_TEAM[n]||n; }
+
+function teamTipHtml(name) {
+  const t = teamData[name];
+  if (!t) return '';
+  const flag = FLAG_MAP[name]||'';
+
+  // Compute stats from schedule
+  const matches = scheduleData.filter(m => {
+    if (m.status !== 'FT') return false;
+    return normSched(m.home_team)===name || normSched(m.away_team)===name;
+  });
+  let w=0,d=0,l=0,gf=0,ga=0;
+  const recent = [];
+  matches.forEach(m => {
+    const isHome = normSched(m.home_team)===name;
+    const hs=m.home_score, as=m.away_score;
+    const mGf=isHome?hs:as, mGa=isHome?as:hs;
+    gf+=mGf; ga+=mGa;
+    const opp = isHome ? normSched(m.away_team) : normSched(m.home_team);
+    const oppFlag = FLAG_MAP[opp]||'';
+    let res;
+    if (mGf>mGa) { w++; res='W'; } else if (mGf<mGa) { l++; res='L'; } else { d++; res='D'; }
+    recent.push({opp,oppFlag,gf:mGf,ga:mGa,res,isHome});
+  });
+
+  // Form dots (last 5)
+  const form = recent.slice(-5);
+  const formHtml = Array(5).fill(null).map((_,i) => {
+    const r = form[i]?.res || 'U';
+    return `<div class="tip-dot ${r.toLowerCase()}">${r}</div>`;
+  }).join('');
+
+  // Recent matches list (last 3)
+  const matchesHtml = recent.slice(-3).map(m =>
+    `<div>${m.isHome?'vs':'@'} ${m.oppFlag} ${m.opp} <span class="tip-match-result">${m.gf}-${m.ga}</span></div>`
+  ).join('');
+
+  return `<div class="team-tip">
+    <div class="tip-hdr">
+      <div class="tip-flag">${flag}</div>
+      <div><div class="tip-name">${name}</div><div class="tip-meta">Group ${t.group_letter} · ${t.confederation||''}</div></div>
+    </div>
+    <div class="tip-form">${formHtml}</div>
+    <div class="tip-stats">
+      <div class="tip-stat"><div class="tip-stat-val">${matches.length}</div><div class="tip-stat-lbl">Played</div></div>
+      <div class="tip-stat"><div class="tip-stat-val">${gf}</div><div class="tip-stat-lbl">GF</div></div>
+      <div class="tip-stat"><div class="tip-stat-val" style="color:${ga>0?'#e07070':'var(--dim)'}">${ga}</div><div class="tip-stat-lbl">GA</div></div>
+    </div>
+    ${matchesHtml ? `<div class="tip-matches">${matchesHtml}</div>` : ''}
+  </div>`;
 }
 
 function toggleWinnerPick(gameId) {
