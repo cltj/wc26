@@ -136,10 +136,11 @@ function renderGames() {
   let currentRound = '';
 
   document.getElementById('games-list').innerHTML = allGames.map(g => {
-    const locked = new Date() >= new Date(g.kickoff);
     const ko = isKnockout(g);
     const groupsDone = allGames.filter(x => x.round === 'group').every(x => x.result);
-    const isSlot = ko && !groupsDone;
+    const teamsKnown = !ko || (groupsDone && g.home_slot !== g.home && g.away_slot !== g.away);
+    const isSlot = ko && !teamsKnown;
+    const locked = new Date() >= new Date(g.kickoff) || isSlot;
     const norway = [g.home,g.away].some(t => t.toLowerCase()==='norway' || t.toLowerCase()==='iraq');
     const kickoff = new Date(g.kickoff);
     const dateStr = kickoff.toLocaleDateString('no-NO',{day:'numeric',month:'short'});
@@ -189,7 +190,8 @@ function renderGames() {
           </div>` : ''}`;
       }
     } else if (isSlot) {
-      inputHtml = `<div class="pred-inp-row"><span class="locked-msg" style="color:var(--dim)">⏳ Opens when group stage is finished</span></div>`;
+      const slotMsg = !groupsDone ? 'Opens when group stage is finished' : 'Opens when matchup is determined';
+      inputHtml = `<div class="pred-inp-row"><span class="locked-msg" style="color:var(--dim)">⏳ ${slotMsg}</span></div>`;
     }
 
     // Round separator
