@@ -119,6 +119,20 @@
 .ranking-badge { display:inline-flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:8px 14px; font-size:13px; margin-right:10px; margin-bottom:8px; }
 .ranking-pos { font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--gold); }
 
+/* Hot/Cold players */
+.hc-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:8px; }
+@media (max-width:500px) { .hc-grid { grid-template-columns:1fr; } }
+.hc-box { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px; }
+.hc-box.hot { border-color:rgba(96,185,122,.25); }
+.hc-box.cold { border-color:rgba(224,52,52,.2); }
+.hc-label { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin-bottom:8px; font-weight:600; }
+.hc-row { display:flex; align-items:center; gap:8px; padding:4px 0; font-size:12px; }
+.hc-rank { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--dim); min-width:30px; }
+.hc-name { font-weight:600; flex:1; }
+.hc-stat { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; }
+.hc-stat.hot { color:var(--green); }
+.hc-stat.cold { color:#e07070; }
+
 .loading { color:var(--dim); font-size:13px; text-align:center; padding:40px; }
 .back-links { display:flex; gap:16px; margin-bottom:16px; }
 .back-link { font-size:12px; color:var(--dim); display:inline-block; text-decoration:none; }
@@ -136,6 +150,7 @@
     <div id="hero"></div>
     <div id="stats-bar"></div>
     <div id="wc-ranking"></div>
+    <div id="hot-cold"></div>
     <div id="form-section"></div>
     <div id="lineup-section"></div>
     <div id="roster-section"></div>
@@ -284,10 +299,24 @@ async function loadTeam(name) {
   const content = document.getElementById('team-content');
 
   try {
-    const [teams, players, schedule] = await Promise.all([
+    // Fetch team, squad, schedule, and all players (for tournament ranking)
+    const allPlayersP = (async () => {
+      const rows = [];
+      let offset = 0;
+      while (true) {
+        const batch = await sb(`players?select=name,team_name,goals,assists,yellow_cards,red_cards&order=name&offset=${offset}&limit=500`);
+        rows.push(...batch);
+        if (batch.length < 500) break;
+        offset += 500;
+      }
+      return rows;
+    })();
+
+    const [teams, players, schedule, allPlayers] = await Promise.all([
       sb(`teams?select=*&name=eq.${encodeURIComponent(name)}`),
       sb(`players?select=*&team_name=eq.${encodeURIComponent(name)}&order=shirt_number`),
       sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id'),
+      allPlayersP,
     ]);
 
     if (!teams.length) { loading.textContent = `Team "${name}" not found.`; return; }
@@ -374,6 +403,58 @@ async function loadTeam(name) {
         <span class="ranking-badge"><span class="ranking-pos">#${myRankGf}</span> by goals scored (${gf})</span>
       </div>`;
 
+    // ── Hot & Cold players ──
+    // Rank all tournament players by goals+assists and by cards
+    const allSorted = allPlayers.filter(p => (p.goals||0)+(p.assists||0) > 0)
+      .sort((a,b) => ((b.goals||0)+(b.assists||0)) - ((a.goals||0)+(a.assists||0)));
+    const allCarded = allPlayers.filter(p => (p.yellow_cards||0)+(p.red_cards||0) > 0)
+      .sort((a,b) => ((b.yellow_cards||0)+(b.red_cards||0)*3) - ((a.yellow_cards||0)+(a.red_cards||0)*3));
+
+    const teamHot = players.filter(p => (p.goals||0)+(p.assists||0) > 0)
+      .sort((a,b) => ((b.goals||0)+(b.assists||0)) - ((a.goals||0)+(a.assists||0)))
+      .slice(0, 3);
+    const teamCold = players.filter(p => (p.yellow_cards||0)+(p.red_cards||0) > 0)
+      .sort((a,b) => ((b.yellow_cards||0)+(b.red_cards||0)*3) - ((a.yellow_cards||0)+(a.red_cards||0)*3))
+      .slice(0, 3);
+
+    function findRank(p, list, scoreFn) {
+      const myScore = scoreFn(p);
+      return list.filter(x => scoreFn(x) > myScore).length + 1;
+    }
+
+    let hotColdHtml = '';
+    if (teamHot.length || teamCold.length) {
+      hotColdHtml = '<div class="hc-grid">';
+      if (teamHot.length) {
+        hotColdHtml += '<div class="hc-box hot"><div class="hc-label">Hot Players</div>';
+        teamHot.forEach(p => {
+          const g = p.goals||0, a = p.assists||0;
+          const rank = findRank(p, allSorted, x => (x.goals||0)+(x.assists||0));
+          hotColdHtml += `<div class="hc-row">
+            <span class="hc-rank">#${rank}</span>
+            <span class="hc-name">${p.name_on_shirt||p.last_name||p.name}</span>
+            <span class="hc-stat hot">${g}G ${a}A</span>
+          </div>`;
+        });
+        hotColdHtml += '</div>';
+      }
+      if (teamCold.length) {
+        hotColdHtml += '<div class="hc-box cold"><div class="hc-label">Disciplinary</div>';
+        teamCold.forEach(p => {
+          const y = p.yellow_cards||0, r = p.red_cards||0;
+          const rank = findRank(p, allCarded, x => (x.yellow_cards||0)+(x.red_cards||0)*3);
+          hotColdHtml += `<div class="hc-row">
+            <span class="hc-rank">#${rank}</span>
+            <span class="hc-name">${p.name_on_shirt||p.last_name||p.name}</span>
+            <span class="hc-stat cold">${y}Y${r?' '+r+'R':''}</span>
+          </div>`;
+        });
+        hotColdHtml += '</div>';
+      }
+      hotColdHtml += '</div>';
+    }
+    document.getElementById('hot-cold').innerHTML = hotColdHtml;
+
     // Form
     const form = results.slice(-5);
     const formDots = Array(5).fill(null).map((_,i) => {
@@ -396,15 +477,17 @@ async function loadTeam(name) {
     if (xi.length) {
       lineupHtml = `
         <div class="section-title">Last Starting Lineup</div>
-        <div class="section-sub">Formation used in the most recent match</div>
+        <div class="section-sub">Formation and positions as reported by ESPN for the most recent match</div>
         ${buildPitchHtml(xi, formation)}`;
     }
     document.getElementById('lineup-section').innerHTML = lineupHtml;
 
     // ── Roster ──
     const starterNames = xi.map(p => (p.name||'').toLowerCase());
+    const subs = team.last_substitutes || [];
+    const subNames = subs.map(p => (p.name||'').toLowerCase());
 
-    // Split into starters (in last XI), substitutes (not in XI but have stats), unused
+    // Split into starters (in last XI), substitutes (subbed in last match), rest
     const starters = [];
     const substitutes = [];
     const unused = [];
@@ -412,7 +495,7 @@ async function loadTeam(name) {
     players.forEach(p => {
       if (isInXI(p, starterNames)) {
         starters.push(p);
-      } else if ((p.goals||0) > 0 || (p.assists||0) > 0 || (p.yellow_cards||0) > 0 || (p.red_cards||0) > 0) {
+      } else if (isInXI(p, subNames)) {
         substitutes.push(p);
       } else {
         unused.push(p);

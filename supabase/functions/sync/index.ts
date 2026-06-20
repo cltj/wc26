@@ -146,28 +146,29 @@ async function espnMatchWinner(eventId: string): Promise<string | null> {
   return null
 }
 
-// Fetch ESPN lineups (formation + starting XI) for both teams
+// Fetch ESPN lineups (formation + starting XI + substitutes) for both teams
 async function espnLineups(eventId: string): Promise<Array<{
   team: string, formation: string,
-  starters: Array<{ name: string, number: string, position: string }>
+  starters: Array<{ name: string, short: string, number: string, position: string }>,
+  substitutes: Array<{ name: string, short: string, number: string, position: string }>,
 }>> {
-  const result: Array<{ team: string, formation: string, starters: Array<{ name: string, number: string, position: string }> }> = []
+  const result: Array<{ team: string, formation: string, starters: any[], substitutes: any[] }> = []
   const res = await fetch(`${ESPN_API}/summary?event=${eventId}`)
   if (!res.ok) return result
   const data = await res.json()
   for (const r of (data.rosters || [])) {
     const team = mapEspnTeam(r.team?.displayName || '')
     const formation = r.formation || ''
-    const starters = (r.roster || [])
-      .filter((e: any) => e.starter)
-      .map((e: any) => ({
-        name: e.athlete?.displayName || '',
-        short: e.athlete?.shortName || e.athlete?.lastName || '',
-        number: e.jersey || '',
-        position: e.position?.abbreviation || '',
-      }))
+    const mapPlayer = (e: any) => ({
+      name: e.athlete?.displayName || '',
+      short: e.athlete?.shortName || e.athlete?.lastName || '',
+      number: e.jersey || '',
+      position: e.position?.abbreviation || '',
+    })
+    const starters = (r.roster || []).filter((e: any) => e.starter).map(mapPlayer)
+    const substitutes = (r.roster || []).filter((e: any) => e.subbedIn).map(mapPlayer)
     if (team && starters.length > 0) {
-      result.push({ team, formation, starters })
+      result.push({ team, formation, starters, substitutes })
     }
   }
   return result
@@ -504,11 +505,12 @@ Deno.serve(async (req) => {
           espnLineups(espnId),
         ])
 
-        // Update team formations/starting XI
+        // Update team formations/starting XI/substitutes
         for (const lu of lineups) {
           await supabase.from('teams').update({
             last_formation: lu.formation,
             last_starting_xi: lu.starters,
+            last_substitutes: lu.substitutes,
           }).eq('name', lu.team)
         }
 
