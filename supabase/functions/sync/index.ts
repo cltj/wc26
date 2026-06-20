@@ -146,6 +146,32 @@ async function espnMatchWinner(eventId: string): Promise<string | null> {
   return null
 }
 
+// Fetch ESPN lineups (formation + starting XI) for both teams
+async function espnLineups(eventId: string): Promise<Array<{
+  team: string, formation: string,
+  starters: Array<{ name: string, number: string, position: string }>
+}>> {
+  const result: Array<{ team: string, formation: string, starters: Array<{ name: string, number: string, position: string }> }> = []
+  const res = await fetch(`${ESPN_API}/summary?event=${eventId}`)
+  if (!res.ok) return result
+  const data = await res.json()
+  for (const r of (data.rosters || [])) {
+    const team = mapEspnTeam(r.team?.displayName || '')
+    const formation = r.formation || ''
+    const starters = (r.roster || [])
+      .filter((e: any) => e.starter)
+      .map((e: any) => ({
+        name: e.athlete?.displayName || '',
+        number: e.jersey || '',
+        position: e.position?.abbreviation || '',
+      }))
+    if (team && starters.length > 0) {
+      result.push({ team, formation, starters })
+    }
+  }
+  return result
+}
+
 // Fetch ESPN match details, return goals/assists/cards
 async function espnMatchStats(eventId: string): Promise<{
   goals: Array<{ player: string, team: string, og: boolean }>,
@@ -472,7 +498,18 @@ Deno.serve(async (req) => {
         }
 
         l(`  Processing ${homeTeam} vs ${awayTeam} (ESPN ${espnId})...`)
-        const stats = await espnMatchStats(espnId)
+        const [stats, lineups] = await Promise.all([
+          espnMatchStats(espnId),
+          espnLineups(espnId),
+        ])
+
+        // Update team formations/starting XI
+        for (const lu of lineups) {
+          await supabase.from('teams').update({
+            last_formation: lu.formation,
+            last_starting_xi: lu.starters,
+          }).eq('name', lu.team)
+        }
 
         // Add to games_processed log
         const score = `${g.home_score}-${g.away_score}`

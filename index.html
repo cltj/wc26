@@ -98,6 +98,12 @@
 .mu-stat-lbl { font-size:7px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; }
 .mu-matches { font-size:9px; color:var(--dim); line-height:1.6; }
 .mu-match-res { font-family:'JetBrains Mono',monospace; font-weight:600; color:var(--text); }
+.mu-lineup { margin-top:6px; border-top:1px solid var(--border); padding-top:6px; }
+.mu-lineup-hdr { font-size:8px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); margin-bottom:4px; }
+.mu-formation { font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--gold); font-size:9px; }
+.mu-player { font-size:9px; color:var(--text); line-height:1.5; }
+.mu-jersey { font-family:'JetBrains Mono',monospace; color:var(--dim); font-size:8px; display:inline-block; width:20px; text-align:right; margin-right:4px; }
+.mu-pos { font-size:7px; color:var(--dim); }
 </style>
 </head>
 <body>
@@ -136,7 +142,7 @@ async function load() {
   const [games, preds, teams, sched] = await Promise.all([
     sb('games?select=*&order=id'),
     sb('predictions?select=*'),
-    sb('teams?select=name,group_letter,confederation&order=name'),
+    sb('teams?select=name,group_letter,confederation,last_formation,last_starting_xi&order=name'),
     sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id'),
   ]);
   allGames = games;
@@ -312,6 +318,7 @@ function teamSideHtml(name) {
       <div class="mu-stat"><div class="mu-stat-val" style="color:${ga>0?'#e07070':'var(--dim)'}">${ga}</div><div class="mu-stat-lbl">GA</div></div>
     </div>
     ${matchesHtml ? `<div class="mu-matches">${matchesHtml}</div>` : ''}
+    ${t.last_formation ? `<div class="mu-lineup"><div class="mu-lineup-hdr">Last lineup <span class="mu-formation">${t.last_formation}</span></div>${(t.last_starting_xi||[]).map(p => `<div class="mu-player"><span class="mu-jersey">${p.number}</span>${p.name} <span class="mu-pos">${p.position}</span></div>`).join('')}</div>` : ''}
   </div>`;
 }
 
