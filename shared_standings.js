@@ -9,6 +9,7 @@ const SCHED_TO_TEAM = {
   'Iran': 'IR Iran',
   'Cape Verde': 'Cabo Verde',
   'Democratic Republic of the Congo': 'DR Congo',
+  'Congo DR': 'DR Congo',
   'United States': 'USA',
   'Turkey': 'Türkiye',
   'Czech Republic': 'Czechia',
