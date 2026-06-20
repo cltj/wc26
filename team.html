@@ -132,6 +132,9 @@
 .hc-stat { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; }
 .hc-stat.hot { color:var(--green); }
 .hc-stat.cold { color:#e07070; }
+.hc-cols { font-family:'JetBrains Mono',monospace; font-size:11px; min-width:24px; text-align:center; }
+.hc-header { font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; padding-bottom:2px; border-bottom:1px solid var(--border); margin-bottom:2px; }
+.hc-header .hc-rank, .hc-header .hc-name, .hc-header .hc-cols { font-family:'Inter',sans-serif; font-weight:600; }
 
 .loading { color:var(--dim); font-size:13px; text-align:center; padding:40px; }
 .back-links { display:flex; gap:16px; margin-bottom:16px; }
@@ -252,19 +255,26 @@ function buildPitchHtml(xi, formation) {
   return html;
 }
 
-// Check if a squad player was in the starting XI (fuzzy name match)
-function isInXI(player, starterNames) {
-  const full = (player.name || '').toLowerCase();
-  const firstLast = `${player.first_name || ''} ${player.last_name || ''}`.toLowerCase().trim();
-  const lastName = (player.last_name || player.name?.split(' ').pop() || '').toLowerCase();
+// Normalize diacritics for fuzzy matching (ø→o, å→a, ü→u, é→e etc.)
+function stripAccents(s) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ø/g,'o').replace(/æ/g,'ae').replace(/ð/g,'d');
+}
 
-  for (const sn of starterNames) {
+// Check if a squad player was in a name list (fuzzy name match)
+function isInXI(player, nameList) {
+  const full = stripAccents((player.name || '').toLowerCase());
+  const firstLast = stripAccents(`${player.first_name || ''} ${player.last_name || ''}`.toLowerCase().trim());
+  const lastName = stripAccents((player.last_name || player.name?.split(' ').pop() || '').toLowerCase());
+
+  for (const raw of nameList) {
+    const sn = stripAccents(raw);
     if (sn === full || sn === firstLast) return true;
-    // Last name match — also check first initial
     const snLast = sn.split(' ').pop();
+    // Last name match + first initial
     if (snLast === lastName && sn.charAt(0) === full.charAt(0)) return true;
-    // Partial contains
+    // Partial contains (for middle names: "Leo Østigard" in "Leo Skiri Østigård")
     if (full.includes(snLast) && snLast.length > 3) return true;
+    if (sn.includes(lastName) && lastName.length > 3) return true;
   }
   return false;
 }
@@ -426,27 +436,37 @@ async function loadTeam(name) {
     if (teamHot.length || teamCold.length) {
       hotColdHtml = '<div class="hc-grid">';
       if (teamHot.length) {
-        hotColdHtml += '<div class="hc-box hot"><div class="hc-label">Hot Players</div>';
+        hotColdHtml += `<div class="hc-box hot"><div class="hc-label">Hot Players</div>
+          <div class="hc-row hc-header">
+            <span class="hc-rank">WC#</span>
+            <span class="hc-name">Name</span>
+            <span class="hc-cols">G</span><span class="hc-cols">A</span><span class="hc-cols">P</span>
+          </div>`;
         teamHot.forEach(p => {
-          const g = p.goals||0, a = p.assists||0;
+          const g = p.goals||0, a = p.assists||0, pts = g + a;
           const rank = findRank(p, allSorted, x => (x.goals||0)+(x.assists||0));
           hotColdHtml += `<div class="hc-row">
             <span class="hc-rank">#${rank}</span>
             <span class="hc-name">${p.name_on_shirt||p.last_name||p.name}</span>
-            <span class="hc-stat hot">${g}G ${a}A</span>
+            <span class="hc-cols hc-stat hot">${g}</span><span class="hc-cols hc-stat hot">${a}</span><span class="hc-cols hc-stat hot">${pts}</span>
           </div>`;
         });
         hotColdHtml += '</div>';
       }
       if (teamCold.length) {
-        hotColdHtml += '<div class="hc-box cold"><div class="hc-label">Disciplinary</div>';
+        hotColdHtml += `<div class="hc-box cold"><div class="hc-label">Disciplinary</div>
+          <div class="hc-row hc-header">
+            <span class="hc-rank">WC#</span>
+            <span class="hc-name">Name</span>
+            <span class="hc-cols">Y</span><span class="hc-cols">R</span>
+          </div>`;
         teamCold.forEach(p => {
           const y = p.yellow_cards||0, r = p.red_cards||0;
           const rank = findRank(p, allCarded, x => (x.yellow_cards||0)+(x.red_cards||0)*3);
           hotColdHtml += `<div class="hc-row">
             <span class="hc-rank">#${rank}</span>
             <span class="hc-name">${p.name_on_shirt||p.last_name||p.name}</span>
-            <span class="hc-stat cold">${y}Y${r?' '+r+'R':''}</span>
+            <span class="hc-cols hc-stat cold">${y}</span><span class="hc-cols hc-stat cold">${r}</span>
           </div>`;
         });
         hotColdHtml += '</div>';
@@ -471,8 +491,23 @@ async function loadTeam(name) {
       ${resultsHtml ? `<div class="form-detail">${resultsHtml}</div>` : '<div class="form-detail">No matches played yet</div>'}`;
 
     // ── Lineup on a pitch ──
-    const xi = team.last_starting_xi || [];
-    const formation = team.last_formation || '';
+    let xi = team.last_starting_xi || [];
+    let formation = team.last_formation || '';
+
+    // Norway override: ESPN reports 4-4-2 but they play 4-3-3
+    if (name === 'Norway' && xi.length) {
+      formation = '4-3-3';
+      xi = xi.map(p => {
+        const n = (p.short||p.name||'').toLowerCase();
+        // Nusa is LW, Sørloth is RW (ESPN has them as LM/CF-R)
+        if (n.includes('nusa')) return { ...p, position: 'LW' };
+        if (n.includes('rloth') || n.includes('sørloth')) return { ...p, position: 'RW' };
+        // Ødegaard is AM (ESPN has him as RM)
+        if (n.includes('degaard')) return { ...p, position: 'AM' };
+        return p;
+      });
+    }
+
     let lineupHtml = '';
     if (xi.length) {
       lineupHtml = `
@@ -514,7 +549,7 @@ async function loadTeam(name) {
       <th>Player</th>
       <th>Pos</th>
       <th class="stat-col">Age</th>
-      <th class="stat-col">Caps</th>
+      <th class="stat-col" title="Career international appearances">Int'l</th>
       <th class="stat-col">G</th>
       <th class="stat-col">A</th>
       <th class="stat-col">Y</th>
@@ -526,12 +561,12 @@ async function loadTeam(name) {
       <div class="roster-wrap"><table class="roster">${thead}<tbody>`;
 
     if (starters.length) {
-      rosterHtml += `<tr><td colspan="9" class="sub-header">Starting XI (last match)</td></tr>`;
+      rosterHtml += `<tr><td colspan="9" class="sub-header">Lineup Last Match</td></tr>`;
       rosterHtml += starters.map(rosterRow).join('');
     }
 
     if (substitutes.length) {
-      rosterHtml += `<tr><td colspan="9" class="sub-header">Used Substitutes</td></tr>`;
+      rosterHtml += `<tr><td colspan="9" class="sub-header">Subs Last Match</td></tr>`;
       rosterHtml += substitutes.map(rosterRow).join('');
     }
 
