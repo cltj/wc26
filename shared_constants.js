@@ -20,7 +20,8 @@ const FLAG_MAP = {
   'Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴',
   'Portugal':'🇵🇹','DR Congo':'🇨🇩','Uzbekistan':'🇺🇿','Colombia':'🇨🇴',
   'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦',
-  // worldcup26.ir API name aliases
+  // Name aliases
+  'Korea Republic':'🇰🇷','Bosnia-Herzegovina':'🇧🇦',
   'Czech Republic':'🇨🇿','Bosnia and Herzegovina':'🇧🇦','United States':'🇺🇸',
   'Turkey':'🇹🇷','Ivory Coast':'🇨🇮','Iran':'🇮🇷','Cape Verde':'🇨🇻',
   'Democratic Republic of the Congo':'🇨🇩',
