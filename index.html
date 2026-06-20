@@ -149,43 +149,40 @@
 .mu-more { display:inline-block; font-size:9px; color:var(--gold); text-decoration:none; margin-top:4px; }
 .mu-more:hover { text-decoration:underline; }
 
-/* Match detail panel */
+/* Schedule card expansion */
 .sched-card { cursor:pointer; transition:transform .15s; }
 .sched-card:hover { transform:translateY(-1px); }
 .sched-card.has-detail { opacity:1; }
-.match-detail { display:none; border-top:1px solid var(--border); padding:14px; }
-.match-detail.open { display:block; }
-.md-score-hdr { display:flex; justify-content:center; align-items:center; gap:16px; margin-bottom:16px; }
-.md-team { text-align:center; }
-.md-team-flag { font-size:28px; }
-.md-team-name { font-size:11px; font-weight:600; margin-top:2px; }
-.md-vs { font-family:'Bebas Neue',sans-serif; font-size:32px; color:var(--gold); }
-.md-events { position:relative; padding:0 0 0 20px; }
-.md-event { display:flex; align-items:flex-start; gap:8px; padding:6px 0; position:relative; font-size:12px; }
-.md-event::before { content:''; position:absolute; left:-16px; top:0; bottom:0; width:2px; background:var(--border); }
-.md-event:last-child::before { bottom:50%; }
-.md-event:first-child::before { top:50%; }
-.md-event:only-child::before { display:none; }
-.md-event-dot { position:absolute; left:-20px; top:50%; transform:translateY(-50%); width:10px; height:10px; border-radius:50%; border:2px solid var(--border); background:var(--pitch); z-index:1; }
-.md-event.goal .md-event-dot { background:var(--gold); border-color:var(--gold); }
-.md-event.card-y .md-event-dot { background:#f5c542; border-color:#f5c542; }
-.md-event.card-r .md-event-dot { background:#e04040; border-color:#e04040; }
-.md-event.sub .md-event-dot { background:var(--green); border-color:var(--green); }
-.md-min { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--dim); min-width:36px; text-align:right; flex-shrink:0; }
-.md-icon { font-size:14px; flex-shrink:0; width:18px; text-align:center; }
-.md-text { flex:1; line-height:1.4; }
-.md-player { font-weight:600; }
-.md-assist { font-size:10px; color:var(--dim); }
-.md-side { font-size:9px; color:var(--dim); opacity:.7; }
-.md-lineups { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
-.md-lineup-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin-bottom:6px; display:flex; align-items:center; gap:6px; }
-.md-lineup-title .flag { font-size:14px; }
-.md-xi-player { font-size:11px; line-height:1.6; display:flex; align-items:center; gap:4px; }
-.md-xi-num { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--dim); min-width:18px; text-align:right; }
-.md-xi-pos { font-size:8px; color:var(--dim); margin-left:auto; }
-.md-xi-event { font-size:10px; margin-left:2px; }
-.md-subs-hdr { font-size:9px; color:var(--dim); margin-top:6px; margin-bottom:2px; text-transform:uppercase; letter-spacing:.05em; }
+.sched-detail { display:none; border-top:1px solid var(--border); padding:14px; }
+.sched-detail.open { display:block; }
+/* Two-column timeline */
+.md-timeline { padding:10px 0; }
+.md-ev { display:grid; grid-template-columns:1fr 36px 1fr; align-items:center; min-height:26px; }
+.md-ev-home { text-align:right; padding-right:10px; font-size:12px; line-height:1.4; }
+.md-ev-away { text-align:left; padding-left:10px; font-size:12px; line-height:1.4; }
+.md-ev-min {
+  text-align:center; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--dim);
+  position:relative; padding:4px 0;
+}
+.md-ev-min::before {
+  content:''; position:absolute; left:50%; top:0; bottom:0; width:2px;
+  background:var(--border); transform:translateX(-50%); z-index:0;
+}
+.md-ev:first-child .md-ev-min::before { top:50%; }
+.md-ev:last-child .md-ev-min::before { bottom:50%; }
+.md-ev:only-child .md-ev-min::before { display:none; }
+.md-ev-min span { position:relative; z-index:1; background:var(--card); padding:1px 3px; border-radius:3px; }
+.md-ev-name { font-weight:600; }
+.md-ev-assist { font-size:10px; color:var(--dim); }
+.md-ev-sub-in { color:var(--green); }
+.md-ev-sub-out { color:#e07070; }
 .md-loading { text-align:center; color:var(--dim); font-size:12px; padding:20px; }
+/* Lineup event badges (in matchup bar) */
+.mu-ev { font-size:10px; margin-left:2px; display:inline; }
+.mu-sub-out { color:#e07070; font-size:9px; }
+.mu-sub-in { color:var(--green); font-size:9px; }
+.mu-subs-hdr { font-size:8px; color:var(--dim); margin-top:6px; margin-bottom:2px; text-transform:uppercase; letter-spacing:.05em; }
+.g-venue { font-size:9px; color:var(--dim); opacity:.7; }
 </style>
 </head>
 <body>
@@ -365,6 +362,9 @@ function renderPredGame(g) {
   }
 
   const roundLabel = g.round && g.round !== 'group' ? `<span style="font-size:9px;font-weight:700;color:var(--gold);letter-spacing:.05em;text-transform:uppercase;margin-left:4px">${ROUND_LABELS[g.round]||g.round}</span>` : '';
+  const sid = schedIdLookup[`${normTeam(g.home)}|${normTeam(g.away)}`];
+  const schedMatch = sid ? scheduleData.find(s => s.id === sid) : null;
+  const venueInfo = schedMatch && schedMatch.stadium ? `${schedMatch.group_name ? schedMatch.group_name + ' · ' : ''}${schedMatch.stadium}, ${schedMatch.city}` : '';
 
   return `<div class="game-card${norway?' norway':''}${ko?' knockout':''}" id="gc-${g.id}">
     <div class="game-hdr" onclick="toggleGame(${g.id})">
@@ -374,17 +374,12 @@ function renderPredGame(g) {
       <div class="g-team">${teamData[normTeam(awayName)] ? `<span class="g-team-link" onclick="showTeamPopup('${awayName.replace(/'/g,"\\'")}',event)">${awayL}</span>` : awayL}</div>
       <div class="g-meta">${roundLabel}${locked?'<span class="lock-pill">LOCKED</span>':'<span class="open-pill">OPEN</span>'} <span class="toggle-arrow">▼</span></div>
     </div>
+    ${venueInfo ? `<div style="padding:0 14px 6px;margin-top:-6px"><span class="g-venue">${venueInfo}</span></div>` : ''}
     <div class="preds-panel" id="pp-${g.id}">
-      ${!isSlot ? matchupHtml(homeName, awayName) : ''}
+      <div id="mu-${g.id}">${!isSlot ? matchupHtml(homeName, awayName) : ''}</div>
+      ${g.result && sid ? `<div id="md-${sid}" class="md-loading" style="padding:10px 0">Loading match events…</div>` : ''}
       <div class="preds-grid">${predsHtml}</div>
       ${inputHtml}
-      ${g.result ? (() => {
-        const sid = schedIdLookup[`${normTeam(g.home)}|${normTeam(g.away)}`];
-        return sid ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-          <button class="btn" style="font-size:11px;padding:5px 12px;background:rgba(255,255,255,.05);color:var(--dim);border:1px solid var(--border);border-radius:5px;cursor:pointer" onclick="event.stopPropagation();toggleMatchDetail(${sid},this)">Match details ▼</button>
-          <div class="match-detail" id="md-${sid}"></div>
-        </div>` : '';
-      })() : ''}
     </div>
   </div>`;
 }
@@ -393,15 +388,14 @@ function renderSchedCard(m) {
   const nor = m.home_team === 'Norway' || m.away_team === 'Norway';
   const isFt = m.status === 'FT';
   const scoreText = isFt ? `${m.home_score} - ${m.away_score}` : (m.kickoff_time ? fmtTime(m.kickoff_time) : 'TBD');
-  const clickable = isFt ? ` onclick="toggleMatchDetail(${m.id})"` : '';
-  return `<div class="sched-card${nor ? ' norway' : ''}${isFt ? ' has-detail' : ''}" id="sc-${m.id}"${clickable}>
+  return `<div class="sched-card${nor ? ' norway' : ''}${isFt ? ' has-detail' : ''}" id="sc-${m.id}" onclick="toggleSchedDetail(${m.id})">
     <div class="sched-row">
       <div class="s-team home"><span>${m.home_team}</span> <span class="s-flag">${flagFor(m.home_team)}</span></div>
       <div class="s-score ${isFt ? 'ft' : 'sched'}">${scoreText}</div>
       <div class="s-team"><span class="s-flag">${flagFor(m.away_team)}</span> <span>${m.away_team}</span></div>
     </div>
-    <div class="sched-meta"><span class="s-group">${m.group_name||''}</span><span>${m.stadium ? m.stadium+', '+m.city : ''}${isFt ? ' <span class="toggle-arrow">▼</span>' : ''}</span></div>
-    ${isFt ? `<div class="match-detail" id="md-${m.id}"></div>` : ''}
+    <div class="sched-meta"><span class="s-group">${m.group_name||''}</span><span>${m.stadium ? m.stadium+', '+m.city : ''} <span class="toggle-arrow">▼</span></span></div>
+    <div class="sched-detail" id="sd-${m.id}"></div>
   </div>`;
 }
 
@@ -478,7 +472,7 @@ function renderGames() {
 }
 
 // ── Team helpers ──────────────────────────────────────────────────────────────
-function teamSideHtml(name) {
+function teamSideHtml(name, matchPlayers) {
   const canonical = normTeam(name);
   const t = teamData[canonical];
   if (!t) return `<div class="mu-side"><div class="mu-hdr"><span class="mu-name">${name}</span></div><div class="mu-meta">No data yet</div></div>`;
@@ -508,6 +502,28 @@ function teamSideHtml(name) {
     `<div>${m.isHome?'vs':'@'} ${m.oppFlag} ${m.opp} <span class="mu-match-res">${m.gf}-${m.ga}</span></div>`
   ).join('');
 
+  // Lineup: use match-specific player_matches data if provided, else generic last_starting_xi
+  let lineupHtml = '';
+  if (matchPlayers && matchPlayers.length) {
+    const starters = matchPlayers.filter(p => p.started).sort((a,b) => (a.formation_place||99) - (b.formation_place||99));
+    const subs = matchPlayers.filter(p => p.subbed_in);
+    const pLine = p => {
+      let b = '';
+      const goals = typeof p.goals === 'string' ? JSON.parse(p.goals) : (p.goals || []);
+      goals.forEach(g => { b += `<span class="mu-ev">⚽</span>`; });
+      const assists = typeof p.assists === 'string' ? JSON.parse(p.assists) : (p.assists || []);
+      assists.forEach(() => { b += `<span class="mu-ev" style="font-size:9px">🎯</span>`; });
+      if (p.yellow_card) b += `<span class="mu-ev">🟨</span>`;
+      if (p.red_card) b += `<span class="mu-ev">🟥</span>`;
+      if (p.subbed_out) b += `<span class="mu-sub-out"> ↓${p.sub_minute||''}</span>`;
+      if (p.subbed_in) b += `<span class="mu-sub-in"> ↑${p.sub_minute||''}</span>`;
+      return `<div class="mu-player"><span class="mu-jersey">${p.player.shirt_number}</span>${shortName(p.player.name)}${b} <span class="mu-pos">${p.position||''}</span></div>`;
+    };
+    lineupHtml = `<div class="mu-lineup"><div class="mu-lineup-hdr">Starting XI</div>${starters.map(pLine).join('')}${subs.length ? `<div class="mu-subs-hdr">Subs</div>${subs.map(pLine).join('')}` : ''}</div>`;
+  } else if (t.last_formation) {
+    lineupHtml = `<div class="mu-lineup"><div class="mu-lineup-hdr">Last starting lineup <span class="mu-formation">${t.last_formation}</span></div>${(t.last_starting_xi||[]).map(p => `<div class="mu-player"><span class="mu-jersey">${p.number}</span>${p.short||p.name} <span class="mu-pos">${p.position}</span></div>`).join('')}</div>`;
+  }
+
   return `<div class="mu-side">
     <div class="mu-hdr"><span class="mu-flag">${flag}</span><div><div class="mu-name">${canonical}</div><div class="mu-meta">Group ${t.group_letter} · ${t.confederation||''}</div></div></div>
     <div class="mu-form">${formHtml}</div>
@@ -517,15 +533,17 @@ function teamSideHtml(name) {
       <div class="mu-stat"><div class="mu-stat-val" style="color:${ga>0?'#e07070':'var(--dim)'}">${ga}</div><div class="mu-stat-lbl">GA</div></div>
     </div>
     ${matchesHtml ? `<div class="mu-matches">${matchesHtml}</div>` : ''}
-    ${t.last_formation ? `<div class="mu-lineup"><div class="mu-lineup-hdr">Last starting lineup <span class="mu-formation">${t.last_formation}</span></div>${(t.last_starting_xi||[]).map(p => `<div class="mu-player"><span class="mu-jersey">${p.number}</span>${p.short||p.name} <span class="mu-pos">${p.position}</span></div>`).join('')}</div>` : ''}
+    ${lineupHtml}
     <a class="mu-more" href="team.html?team=${encodeURIComponent(canonical)}" onclick="event.stopPropagation()">View full squad &rarr;</a>
   </div>`;
 }
 
-function matchupHtml(homeName, awayName) {
+function matchupHtml(homeName, awayName, matchRows) {
   const hCanon = normTeam(homeName), aCanon = normTeam(awayName);
   if (!teamData[hCanon] && !teamData[aCanon]) return '';
-  return `<div class="matchup-bar">${teamSideHtml(homeName)}${teamSideHtml(awayName)}</div>`;
+  const homePlayers = matchRows ? matchRows.filter(r => normTeam(r.player.team_name) === hCanon) : null;
+  const awayPlayers = matchRows ? matchRows.filter(r => normTeam(r.player.team_name) === aCanon) : null;
+  return `<div class="matchup-bar">${teamSideHtml(homeName, homePlayers)}${teamSideHtml(awayName, awayPlayers)}</div>`;
 }
 
 function showTeamPopup(name, ev) {
@@ -592,8 +610,18 @@ function toggleWinnerPick(gameId) {
 }
 
 function toggleGame(id) {
-  document.getElementById(`pp-${id}`)?.classList.toggle('open');
-  document.getElementById(`gc-${id}`)?.classList.toggle('open');
+  const pp = document.getElementById(`pp-${id}`);
+  const gc = document.getElementById(`gc-${id}`);
+  pp?.classList.toggle('open');
+  gc?.classList.toggle('open');
+  // Auto-load match data for finished prediction games
+  if (pp?.classList.contains('open')) {
+    const g = allGames.find(g => g.id === id);
+    if (g?.result) {
+      const sid = schedIdLookup[`${normTeam(g.home)}|${normTeam(g.away)}`];
+      if (sid) loadPredMatchData(id, sid);
+    }
+  }
 }
 
 async function savePred(gameId) {
@@ -631,44 +659,6 @@ async function savePred(gameId) {
 // ── Match detail (click to expand) ───────────────────────────────────────────
 const matchDetailCache = {};
 
-async function toggleMatchDetail(schedId, btnEl) {
-  const panel = document.getElementById(`md-${schedId}`);
-  const card = document.getElementById(`sc-${schedId}`);
-  if (!panel) return;
-
-  if (panel.classList.contains('open')) {
-    panel.classList.remove('open');
-    card?.classList.remove('open');
-    if (btnEl) btnEl.textContent = 'Match details ▼';
-    return;
-  }
-
-  panel.classList.add('open');
-  card?.classList.add('open');
-  if (btnEl) btnEl.textContent = 'Match details ▲';
-
-  if (matchDetailCache[schedId]) {
-    panel.innerHTML = matchDetailCache[schedId];
-    return;
-  }
-
-  panel.innerHTML = '<div class="md-loading">Loading match data…</div>';
-
-  try {
-    const rows = await sb(`player_matches?select=*,player:players!player_matches_player_id_fkey(name,shirt_number,team_name)&game_id=eq.${schedId}&order=formation_place`);
-    const sched = scheduleData.find(s => s.id === schedId);
-    if (!sched || !rows.length) {
-      panel.innerHTML = '<div class="md-loading">No match data available</div>';
-      return;
-    }
-    const html = buildMatchDetail(sched, rows);
-    matchDetailCache[schedId] = html;
-    panel.innerHTML = html;
-  } catch(e) {
-    panel.innerHTML = `<div class="md-loading">Error loading data</div>`;
-  }
-}
-
 function parseMinute(str) {
   if (!str) return 999;
   const m = str.match(/(\d+)/);
@@ -679,138 +669,126 @@ function shortName(fullName) {
   if (!fullName) return '?';
   const parts = fullName.trim().split(/\s+/);
   if (parts.length <= 2) return fullName;
-  // Use first initial + last name
   return parts[0][0] + '. ' + parts[parts.length - 1];
 }
 
-function buildMatchDetail(sched, rows) {
+async function fetchMatchData(schedId) {
+  if (matchDetailCache[schedId]) return matchDetailCache[schedId];
+  const rows = await sb(`player_matches?select=*,player:players!player_matches_player_id_fkey(name,shirt_number,team_name)&game_id=eq.${schedId}&order=formation_place`);
+  matchDetailCache[schedId] = rows;
+  return rows;
+}
+
+// Schedule card toggle — shows matchup bar + timeline
+async function toggleSchedDetail(schedId) {
+  const panel = document.getElementById(`sd-${schedId}`);
+  const card = document.getElementById(`sc-${schedId}`);
+  if (!panel) return;
+  if (panel.classList.contains('open')) { panel.classList.remove('open'); card?.classList.remove('open'); return; }
+  panel.classList.add('open'); card?.classList.add('open');
+
+  const sched = scheduleData.find(s => s.id === schedId);
+  if (!sched) return;
+  const isFt = sched.status === 'FT';
+
+  if (isFt) {
+    panel.innerHTML = '<div class="md-loading">Loading…</div>';
+    try {
+      const rows = await fetchMatchData(schedId);
+      if (!rows.length) { panel.innerHTML = matchupHtml(sched.home_team, sched.away_team); return; }
+      panel.innerHTML = matchupHtml(sched.home_team, sched.away_team, rows) + buildTimeline(sched, rows);
+    } catch(e) { panel.innerHTML = matchupHtml(sched.home_team, sched.away_team) + '<div class="md-loading">Error loading match data</div>'; }
+  } else {
+    panel.innerHTML = matchupHtml(sched.home_team, sched.away_team);
+  }
+}
+
+// For prediction cards: auto-load match data when panel opens (for finished games)
+async function loadPredMatchData(gameId, schedId) {
+  const mdEl = document.getElementById(`md-${schedId}`);
+  const muEl = document.getElementById(`mu-${gameId}`);
+  if (!mdEl || mdEl.dataset.loaded) return;
+  mdEl.dataset.loaded = '1';
+
+  const sched = scheduleData.find(s => s.id === schedId);
+  if (!sched) { mdEl.innerHTML = ''; return; }
+
+  try {
+    const rows = await fetchMatchData(schedId);
+    if (!rows.length) { mdEl.innerHTML = '<div class="md-loading">No match data</div>'; return; }
+    // Update matchup bar with event badges
+    const g = allGames.find(g => g.id === gameId);
+    if (muEl && g) muEl.innerHTML = matchupHtml(g.home, g.away, rows);
+    // Show timeline
+    mdEl.innerHTML = buildTimeline(sched, rows);
+  } catch(e) { mdEl.innerHTML = '<div class="md-loading">Error loading data</div>'; }
+}
+
+function buildTimeline(sched, rows) {
   const homeTeam = normTeam(sched.home_team);
   const awayTeam = normTeam(sched.away_team);
-  const homeFlag = flagFor(sched.home_team);
-  const awayFlag = flagFor(sched.away_team);
 
-  // Collect all events
   const events = [];
-
   rows.forEach(pm => {
     const team = normTeam(pm.player.team_name);
     const side = team === homeTeam ? 'home' : 'away';
     const name = shortName(pm.player.name);
-    const num = pm.player.shirt_number;
 
-    // Goals
     const goals = typeof pm.goals === 'string' ? JSON.parse(pm.goals) : (pm.goals || []);
     goals.forEach(g => {
-      events.push({ type:'goal', minute:g.minute, min:parseMinute(g.minute), side, name, num, penalty:g.type==='penalty', og:g.type==='own goal' });
+      events.push({ type:'goal', minute:g.minute, min:parseMinute(g.minute), side, name, penalty:g.type==='penalty', og:g.type==='own goal' });
     });
 
-    // Assists
     const assists = typeof pm.assists === 'string' ? JSON.parse(pm.assists) : (pm.assists || []);
     assists.forEach(a => {
-      events.push({ type:'assist', minute:a.minute, min:parseMinute(a.minute), side, name, num, _assoc:true });
+      events.push({ type:'assist', minute:a.minute, min:parseMinute(a.minute), side, name, _assoc:true });
     });
 
-    // Cards
-    if (pm.yellow_card) {
-      events.push({ type:'card-y', minute:pm.yellow_card, min:parseMinute(pm.yellow_card), side, name, num });
-    }
-    if (pm.red_card) {
-      events.push({ type:'card-r', minute:pm.red_card, min:parseMinute(pm.red_card), side, name, num });
-    }
+    if (pm.yellow_card) events.push({ type:'card-y', minute:pm.yellow_card, min:parseMinute(pm.yellow_card), side, name });
+    if (pm.red_card) events.push({ type:'card-r', minute:pm.red_card, min:parseMinute(pm.red_card), side, name });
 
-    // Subs
-    if (pm.subbed_in && pm.sub_minute) {
-      events.push({ type:'sub', minute:pm.sub_minute, min:parseMinute(pm.sub_minute), side, name, num, subDir:'in' });
-    }
-    if (pm.subbed_out && pm.sub_minute) {
-      events.push({ type:'sub', minute:pm.sub_minute, min:parseMinute(pm.sub_minute), side, name, num, subDir:'out' });
-    }
+    if (pm.subbed_in && pm.sub_minute) events.push({ type:'sub', minute:pm.sub_minute, min:parseMinute(pm.sub_minute), side, name, subDir:'in' });
+    if (pm.subbed_out && pm.sub_minute) events.push({ type:'sub', minute:pm.sub_minute, min:parseMinute(pm.sub_minute), side, name, subDir:'out' });
   });
 
-  // Pair assists with goals at same minute
-  const goalEvents = events.filter(e => e.type === 'goal');
-  const assistEvents = events.filter(e => e.type === 'assist');
-  goalEvents.forEach(g => {
-    const a = assistEvents.find(a => a.min === g.min && a.side === g.side && !a._used);
+  // Pair assists with goals
+  events.filter(e => e.type === 'goal').forEach(g => {
+    const a = events.find(a => a.type === 'assist' && a.min === g.min && a.side === g.side && !a._used);
     if (a) { g.assistName = a.name; a._used = true; }
   });
 
-  // Pair subs (in + out at same minute on same side)
-  const subIns = events.filter(e => e.type === 'sub' && e.subDir === 'in');
-  const subOuts = events.filter(e => e.type === 'sub' && e.subDir === 'out');
-  subIns.forEach(si => {
-    const so = subOuts.find(so => so.min === si.min && so.side === si.side && !so._used);
+  // Pair subs
+  events.filter(e => e.type === 'sub' && e.subDir === 'in').forEach(si => {
+    const so = events.find(so => so.type === 'sub' && so.subDir === 'out' && so.min === si.min && so.side === si.side && !so._used);
     if (so) { si.replacedName = so.name; so._used = true; }
   });
 
-  // Filter out paired assists and paired sub-outs
   const timeline = events.filter(e => !e._used && !e._assoc).sort((a,b) => a.min - b.min);
+  if (!timeline.length) return '';
 
-  // Build timeline HTML
-  const timelineHtml = timeline.length ? timeline.map(e => {
-    let icon = '', text = '', cls = e.type;
+  const evHtml = timeline.map(e => {
+    let content = '';
     if (e.type === 'goal') {
-      icon = e.og ? '🔴' : '⚽';
-      text = `<span class="md-player">${e.name}</span>${e.og ? ' (OG)' : ''}${e.penalty ? ' (pen)' : ''}${e.assistName ? `<br><span class="md-assist">assist: ${e.assistName}</span>` : ''}`;
+      content = `⚽ <span class="md-ev-name">${e.name}</span>${e.og?' <span class="md-ev-assist">(OG)</span>':''}${e.penalty?' <span class="md-ev-assist">(pen)</span>':''}${e.assistName?` <span class="md-ev-assist">(${e.assistName})</span>`:''}`;
     } else if (e.type === 'card-y') {
-      icon = '🟨'; text = `<span class="md-player">${e.name}</span>`;
+      content = `🟨 <span class="md-ev-name">${e.name}</span>`;
     } else if (e.type === 'card-r') {
-      icon = '🟥'; text = `<span class="md-player">${e.name}</span>`;
+      content = `🟥 <span class="md-ev-name">${e.name}</span>`;
     } else if (e.type === 'sub') {
-      icon = '🔄'; text = `<span class="md-player">${e.name}</span> on${e.replacedName ? `, ${e.replacedName} off` : ''}`;
-    }
-    const sideLabel = e.side === 'home' ? homeTeam : awayTeam;
-    return `<div class="md-event ${cls}">
-      <span class="md-event-dot"></span>
-      <span class="md-min">${e.minute}</span>
-      <span class="md-icon">${icon}</span>
-      <span class="md-text">${text} <span class="md-side">${sideLabel}</span></span>
-    </div>`;
-  }).join('') : '<div style="color:var(--dim);font-size:11px;padding:8px 0">No events recorded</div>';
-
-  // Build lineups
-  const homePlayers = rows.filter(r => normTeam(r.player.team_name) === homeTeam);
-  const awayPlayers = rows.filter(r => normTeam(r.player.team_name) === awayTeam);
-
-  function lineupHtml(players, teamName, flag) {
-    const starters = players.filter(p => p.started).sort((a,b) => (a.formation_place||99) - (b.formation_place||99));
-    const subs = players.filter(p => p.subbed_in);
-
-    function playerBadges(pm) {
-      let b = '';
-      const goals = typeof pm.goals === 'string' ? JSON.parse(pm.goals) : (pm.goals || []);
-      goals.forEach(() => { b += '<span class="md-xi-event">⚽</span>'; });
-      if (pm.yellow_card) b += '<span class="md-xi-event">🟨</span>';
-      if (pm.red_card) b += '<span class="md-xi-event">🟥</span>';
-      if (pm.subbed_out) b += '<span class="md-xi-event" style="font-size:9px">↓</span>';
-      if (pm.subbed_in) b += `<span class="md-xi-event" style="font-size:9px">↑${pm.sub_minute||''}</span>`;
-      return b;
+      content = `<span class="md-ev-sub-in">↑ ${e.name}</span>${e.replacedName ? ` <span class="md-ev-sub-out">↓ ${e.replacedName}</span>` : ''}`;
     }
 
-    return `<div>
-      <div class="md-lineup-title"><span class="flag">${flag}</span> ${teamName}</div>
-      ${starters.map(p => `<div class="md-xi-player">
-        <span class="md-xi-num">${p.player.shirt_number}</span>
-        <span>${shortName(p.player.name)}</span>
-        ${playerBadges(p)}
-        <span class="md-xi-pos">${p.position||''}</span>
-      </div>`).join('')}
-      ${subs.length ? `<div class="md-subs-hdr">Substitutes</div>
-      ${subs.map(p => `<div class="md-xi-player">
-        <span class="md-xi-num">${p.player.shirt_number}</span>
-        <span>${shortName(p.player.name)}</span>
-        ${playerBadges(p)}
-        <span class="md-xi-pos">${p.position||''}</span>
-      </div>`).join('')}` : ''}
-    </div>`;
-  }
+    const homeCell = e.side === 'home' ? content : '';
+    const awayCell = e.side === 'away' ? content : '';
 
-  return `
-    <div class="md-events">${timelineHtml}</div>
-    <div class="md-lineups">
-      ${lineupHtml(homePlayers, homeTeam, homeFlag)}
-      ${lineupHtml(awayPlayers, awayTeam, awayFlag)}
+    return `<div class="md-ev">
+      <div class="md-ev-home">${homeCell}</div>
+      <div class="md-ev-min"><span>${e.minute}</span></div>
+      <div class="md-ev-away">${awayCell}</div>
     </div>`;
+  }).join('');
+
+  return `<div class="md-timeline" style="margin:12px 0;padding:10px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)">${evHtml}</div>`;
 }
 
 load();
