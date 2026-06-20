@@ -162,6 +162,7 @@ async function espnLineups(eventId: string): Promise<Array<{
       .filter((e: any) => e.starter)
       .map((e: any) => ({
         name: e.athlete?.displayName || '',
+        short: e.athlete?.shortName || e.athlete?.lastName || '',
         number: e.jersey || '',
         position: e.position?.abbreviation || '',
       }))
