@@ -38,22 +38,24 @@ const ROUNDS = [
 
 async function loadBracket() {
   try {
-    const [teams, schedule] = await Promise.all([
-      sb('teams?select=name,group_letter&order=group_letter,name'),
-      sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id')
-    ]);
-
-    const groups = computeStandings(teams, schedule);
-    const qualGroups = qualifyingThirdGroups(groups);
-
-    // Resolve R32 slots to actual team names where possible
-    const r32Resolved = R32_STRUCTURE.map(slot => ({
-      topLabel: slot.top,
-      topTeam: resolveSlot(slot.top, groups, qualGroups),
-      botLabel: slot.bot,
-      botTeam: resolveSlot(slot.bot, groups, qualGroups),
-      date: slot.date,
-    }));
+    // Load R32 games directly from database - they have actual team names
+    const r32Games = await sb('games?round=eq.R32&select=id,home,away,home_slot,away_slot,kickoff,result&order=kickoff');
+    
+    // Map R32_STRUCTURE slots to actual games from database
+    const r32Resolved = R32_STRUCTURE.map(slot => {
+      // Find the game matching these slots
+      const game = r32Games.find(g => 
+        g.home_slot === slot.top && g.away_slot === slot.bot
+      );
+      return {
+        topLabel: slot.top,
+        topTeam: game?.home || null,  // Use actual team name from DB
+        botLabel: slot.bot,
+        botTeam: game?.away || null,  // Use actual team name from DB
+        date: slot.date,
+        result: game?.result || null,
+      };
+    });
 
     buildBracket(r32Resolved);
   } catch(e) {
