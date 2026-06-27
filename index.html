@@ -327,13 +327,13 @@ function renderPredGame(g) {
   const homeKnown = !ko || !g.home_slot || g.home !== g.home_slot;
   const awayKnown = !ko || !g.away_slot || g.away !== g.away_slot;
   const teamsKnown = homeKnown && awayKnown;
-  const isSlot = ko && !teamsKnown;
-  const locked = new Date() >= new Date(g.kickoff) || isSlot;
+  const locked = new Date() >= new Date(g.kickoff) || (ko && !teamsKnown);
   const norway = [g.home,g.away].some(t => t.toLowerCase()==='norway' || t.toLowerCase()==='iraq');
   const kickoff = new Date(g.kickoff);
   const timeStr = kickoff.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'});
-  const homeName = isSlot && g.home_slot ? g.home_slot : g.home;
-  const awayName = isSlot && g.away_slot ? g.away_slot : g.away;
+  // Show actual team name if known, otherwise show slot label
+  const homeName = (ko && !homeKnown && g.home_slot) ? g.home_slot : g.home;
+  const awayName = (ko && !awayKnown && g.away_slot) ? g.away_slot : g.away;
   const homeFlag = FLAG_MAP[homeName] ? FLAG_MAP[homeName]+' ' : '';
   const awayFlag = FLAG_MAP[awayName] ? FLAG_MAP[awayName]+' ' : '';
   const homeL = homeFlag + homeName + (homeName.toLowerCase()==='norway'?' <span class="norway-badge">🇳🇴</span>':'');
