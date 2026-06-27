@@ -322,8 +322,11 @@ let schedIdLookup = {};
 function renderPredGame(g) {
   const user = getUser();
   const ko = isKnockout(g);
-  const groupsDone = allGames.filter(x => x.round === 'group').every(x => x.result);
-  const teamsKnown = !ko || (groupsDone && g.home_slot !== g.home && g.away_slot !== g.away);
+  // Teams are known if home/away have actual team names (not slot labels)
+  // A slot label looks like "1st A", "2nd B", "3rd C/E" - check if home differs from home_slot
+  const homeKnown = !ko || !g.home_slot || g.home !== g.home_slot;
+  const awayKnown = !ko || !g.away_slot || g.away !== g.away_slot;
+  const teamsKnown = homeKnown && awayKnown;
   const isSlot = ko && !teamsKnown;
   const locked = new Date() >= new Date(g.kickoff) || isSlot;
   const norway = [g.home,g.away].some(t => t.toLowerCase()==='norway' || t.toLowerCase()==='iraq');
