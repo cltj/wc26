@@ -377,8 +377,7 @@ function renderPredGame(g) {
         </div>` : ''}`;
     }
   } else if (isSlot) {
-    const slotMsg = !groupsDone ? 'Opens when group stage is finished' : 'Opens when matchup is determined';
-    inputHtml = `<div class="pred-inp-row"><span class="locked-msg" style="color:var(--dim)">⏳ ${slotMsg}</span></div>`;
+    inputHtml = `<div class="pred-inp-row"><span class="locked-msg" style="color:var(--dim)">⏳ Opens when matchup is determined</span></div>`;
   }
 
   const roundLabel = g.round && g.round !== 'group' ? `<span style="font-size:9px;font-weight:700;color:var(--gold);letter-spacing:.05em;text-transform:uppercase;margin-left:4px">${ROUND_LABELS[g.round]||g.round}</span>` : '';
