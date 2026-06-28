@@ -304,10 +304,9 @@ async function load() {
 function renderLB() {
   const lb = buildLeaderboard(allGames, allPredictions);
   document.getElementById('lb-grid').innerHTML = lb.map(([name, s], i) => {
-    // Calculate accuracy: (correct predictions) / (total finished games) * 100
-    const totalFinished = s.played + s.missed;
+    // Calculate accuracy: (correct predictions) / (games played) * 100
     const correct = s.exact + s.winner;
-    const accuracy = totalFinished > 0 ? Math.round((correct / totalFinished) * 100) : 0;
+    const accuracy = s.played > 0 ? Math.round((correct / s.played) * 100) : 0;
     return `
     <div class="lb-card ${rankClass[i]||''}">
       <div style="position:relative">
