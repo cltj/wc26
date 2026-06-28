@@ -20,8 +20,9 @@
 .rank-4 .lb-ribbon, .rank-5 .lb-ribbon { background: rgba(255,255,255,.1); color: var(--dim); }
 .lb-body { padding: 10px 12px 0; }
 .lb-name { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
-.lb-pts  { font-family: 'Bebas Neue',sans-serif; font-size: 40px; line-height: 1; margin-bottom: 8px; }
+.lb-pts  { font-family: 'Bebas Neue',sans-serif; font-size: 40px; line-height: 1; margin-bottom: 4px; }
 .rank-1 .lb-pts { color: var(--gold); }
+.lb-accuracy { font-size: 12px; color: var(--dim); margin-bottom: 8px; font-weight: 500; }
 .lb-chips { display: flex; gap: 4px; flex-wrap: wrap; }
 .lb-card.rank-1::after { content: '🏆'; position: absolute; top: 8px; right: 8px; font-size: 16px; opacity: .8; }
 
@@ -70,6 +71,17 @@
 .date-btn.active { background:rgba(240,180,41,.12); border-color:var(--gold); color:var(--gold); }
 .date-btn .dow { display:block; font-size:9px; letter-spacing:.06em; text-transform:uppercase; opacity:.7; }
 .date-btn .day { display:block; font-family:'Bebas Neue',sans-serif; font-size:18px; line-height:1; }
+
+/* Past/Future toggle */
+.games-toggle { display:flex; gap:8px; margin-top:16px; }
+.toggle-btn {
+  flex:1; background:var(--card); border:1px solid var(--border); border-radius:8px;
+  color:var(--dim); font-size:13px; font-weight:600; padding:12px 16px;
+  cursor:pointer; font-family:'Inter',sans-serif; transition:all .15s;
+}
+.toggle-btn:hover { border-color:var(--gold); color:var(--white); }
+.toggle-btn.active { background:rgba(240,180,41,.12); border-color:var(--gold); color:var(--gold); }
+
 .day-title {
   font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:.06em;
   color:var(--gold); margin-bottom:10px; margin-top:24px; display:flex; align-items:center; gap:10px;
@@ -215,10 +227,22 @@
     <div class="lb-grid" id="lb-grid"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
   </section>
 
-  <section>
-    <div class="section-title">Games</div>
+  <section style="margin-bottom:40px">
     <div class="date-nav" id="date-nav"></div>
-    <div class="games-list" id="games-list"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
+    <div class="games-toggle">
+      <button class="toggle-btn active" id="btn-past" onclick="showSection('past')">Past Games</button>
+      <button class="toggle-btn" id="btn-future" onclick="showSection('future')">Future Games</button>
+    </div>
+  </section>
+
+  <section id="section-past">
+    <div class="section-title">Past Games</div>
+    <div class="games-list" id="past-games-list"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
+  </section>
+
+  <section id="section-future" style="display:none">
+    <div class="section-title">Upcoming Games</div>
+    <div class="games-list" id="future-games-list"><div style="color:var(--dim);font-size:13px">Loading…</div></div>
   </section>
 </div>
 
@@ -243,7 +267,22 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 function fmtDate(d) { const dt = new Date(d+'T00:00:00'); return `${DOW[dt.getDay()]} ${dt.getDate()} ${MONTHS[dt.getMonth()]}`; }
 function fmtTime(t) { if (!t) return ''; const [h,m] = t.split(':'); return `${h}:${m}`; }
 function flagFor(team) { return FLAG_MAP[team] || FLAG_MAP[TEAM_ALIAS[team]] || ''; }
-function scrollToDate(date) { const el = document.getElementById('day-'+date); if (el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function scrollToDate(date) {
+  // Check which section has this date
+  const pastSection = document.getElementById('section-past');
+  const futureSection = document.getElementById('section-future');
+  const pastEl = pastSection.querySelector('#day-'+date);
+  const futureEl = futureSection.querySelector('#day-'+date);
+  
+  // Switch to the section containing this date and scroll
+  if (futureEl) {
+    showSection('future');
+    setTimeout(() => futureEl.scrollIntoView({behavior:'smooth',block:'start'}), 50);
+  } else if (pastEl) {
+    showSection('past');
+    setTimeout(() => pastEl.scrollIntoView({behavior:'smooth',block:'start'}), 50);
+  }
+}
 
 async function load() {
   const [games, preds, teams, sched, participants] = await Promise.all([
@@ -264,7 +303,12 @@ async function load() {
 
 function renderLB() {
   const lb = buildLeaderboard(allGames, allPredictions);
-  document.getElementById('lb-grid').innerHTML = lb.map(([name, s], i) => `
+  document.getElementById('lb-grid').innerHTML = lb.map(([name, s], i) => {
+    // Calculate accuracy: (correct predictions) / (total finished games) * 100
+    const totalFinished = s.played + s.missed;
+    const correct = s.exact + s.winner;
+    const accuracy = totalFinished > 0 ? Math.round((correct / totalFinished) * 100) : 0;
+    return `
     <div class="lb-card ${rankClass[i]||''}">
       <div style="position:relative">
         <img class="lb-photo" src="${playerPhotos[name] || BASE_URL+'/placeholder.jpg'}" alt="${name}" loading="lazy"
@@ -274,6 +318,7 @@ function renderLB() {
       <div class="lb-body">
         <div class="lb-name">${name}</div>
         <div class="lb-pts">${s.pts}</div>
+        <div class="lb-accuracy">${accuracy}% accuracy</div>
         <div class="lb-chips">
           ${s.exact  ? `<span class="chip chip-exact">${s.exact}× exact</span>`  : ''}
           ${s.winner ? `<span class="chip chip-win">${s.winner}× winner</span>`  : ''}
@@ -283,7 +328,8 @@ function renderLB() {
           <span class="chip chip-played">${s.played} played</span>
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function badgeHtml(game, pred) {
@@ -460,11 +506,22 @@ function renderGames() {
     </button>`;
   }).join('');
 
+  // Helper to check if a game/match is finished
+  const isFinished = (m) => {
+    if (m._predGame) return !!m._predGame.result;
+    if (m.status === 'FT') return true;
+    const h = normTeam(m.home_team), a = normTeam(m.away_team);
+    const game = gameLookup[`${h}|${a}`];
+    return game && !!game.result;
+  };
+
+  // Separate dates into past and future
+  const pastDates = dates.filter(d => byDate[d].some(isFinished));
+  const futureDates = dates.filter(d => byDate[d].some(m => !isFinished(m)));
+
   // Render day sections — track rendered prediction game IDs to avoid duplicates
-  const renderedGameIds = new Set();
-  document.getElementById('games-list').innerHTML = dates.map(date => {
-    const items = byDate[date];
-    const cardsHtml = items.map(m => {
+  const renderDaySection = (date, items, renderedGameIds, filterFn) => {
+    const cardsHtml = items.filter(filterFn).map(m => {
       // Check if this is an unmatched prediction game injected directly
       if (m._predGame) { renderedGameIds.add(m._predGame.id); return renderPredGame(m._predGame); }
 
@@ -478,17 +535,56 @@ function renderGames() {
       return renderSchedCard(m);
     }).join('');
 
+    if (!cardsHtml.trim()) return '';
+
     return `<div class="day-section" id="day-${date}">
       <div class="day-title">${fmtDate(date)}${date===today?' &mdash; Today':''}</div>
       ${cardsHtml}
     </div>`;
-  }).join('');
+  };
 
-  // Auto-scroll to today
-  if (byDate[today]) {
-    setTimeout(() => {
-      document.getElementById('day-'+today)?.scrollIntoView({behavior:'smooth',block:'start'});
-    }, 100);
+  // Render past games (reverse order - most recent first)
+  const pastRenderedIds = new Set();
+  document.getElementById('past-games-list').innerHTML = pastDates.slice().reverse().map(date => {
+    return renderDaySection(date, byDate[date], pastRenderedIds, isFinished);
+  }).join('') || '<div style="color:var(--dim);font-size:13px;padding:20px 0">No past games yet</div>';
+
+  // Render future games (chronological order)
+  const futureRenderedIds = new Set();
+  document.getElementById('future-games-list').innerHTML = futureDates.map(date => {
+    return renderDaySection(date, byDate[date], futureRenderedIds, m => !isFinished(m));
+  }).join('') || '<div style="color:var(--dim);font-size:13px;padding:20px 0">No upcoming games</div>';
+
+  // Count for button labels
+  const pastCount = pastRenderedIds.size;
+  const futureCount = futureRenderedIds.size;
+  document.getElementById('btn-past').textContent = `Past Games (${pastCount})`;
+  document.getElementById('btn-future').textContent = `Upcoming Games (${futureCount})`;
+
+  // Default to future if there are upcoming games, otherwise show past
+  if (futureCount > 0) {
+    showSection('future');
+  } else {
+    showSection('past');
+  }
+}
+
+function showSection(which) {
+  const pastSection = document.getElementById('section-past');
+  const futureSection = document.getElementById('section-future');
+  const btnPast = document.getElementById('btn-past');
+  const btnFuture = document.getElementById('btn-future');
+  
+  if (which === 'past') {
+    pastSection.style.display = 'block';
+    futureSection.style.display = 'none';
+    btnPast.classList.add('active');
+    btnFuture.classList.remove('active');
+  } else {
+    pastSection.style.display = 'none';
+    futureSection.style.display = 'block';
+    btnPast.classList.remove('active');
+    btnFuture.classList.add('active');
   }
 }
 
