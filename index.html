@@ -265,7 +265,7 @@ function normTeam(n) { return TEAM_ALIAS[n]||n; }
 const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fmtDate(d) { const dt = new Date(d+'T00:00:00'); return `${DOW[dt.getDay()]} ${dt.getDate()} ${MONTHS[dt.getMonth()]}`; }
-function fmtTime(t) { if (!t) return ''; const [h,m] = t.split(':'); return `${h}:${m}`; }
+function fmtTime(t, d) { if (!t) return ''; const dt = new Date(`${d||'2026-06-15'}T${t}Z`); return dt.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Oslo'}); }
 function flagFor(team) { return FLAG_MAP[team] || FLAG_MAP[TEAM_ALIAS[team]] || ''; }
 function scrollToDate(date) {
   // Check which section has this date
@@ -453,7 +453,7 @@ function renderPredGame(g) {
 function renderSchedCard(m) {
   const nor = m.home_team === 'Norway' || m.away_team === 'Norway';
   const isFt = m.status === 'FT';
-  const scoreText = isFt ? `${m.home_score} - ${m.away_score}` : (m.kickoff_time ? fmtTime(m.kickoff_time) : 'TBD');
+  const scoreText = isFt ? `${m.home_score} - ${m.away_score}` : (m.kickoff_time ? fmtTime(m.kickoff_time, m.match_date) : 'TBD');
   return `<div class="sched-card${nor ? ' norway' : ''}${isFt ? ' has-detail' : ''}" id="sc-${m.id}" onclick="toggleSchedDetail(${m.id})">
     <div class="sched-row">
       <div class="s-team home"><span>${m.home_team}</span> <span class="s-flag">${flagFor(m.home_team)}</span></div>

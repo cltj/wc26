@@ -145,10 +145,10 @@ function fmtDate(d) {
   return `${DOW[dt.getDay()]} ${dt.getDate()} ${MONTHS[dt.getMonth()]}`;
 }
 
-function fmtTime(t) {
+function fmtTime(t, d) {
   if (!t) return '';
-  const [h,m] = t.split(':');
-  return `${h}:${m}`;
+  const dt = new Date(`${d||'2026-06-15'}T${t}Z`);
+  return dt.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Oslo'});
 }
 
 async function loadSchedule() {
@@ -236,7 +236,7 @@ function render() {
           const scoreClass = isFt ? 'ft' : 'sched';
           const scoreText = isFt
             ? `${m.home_score} - ${m.away_score}`
-            : (m.kickoff_time ? fmtTime(m.kickoff_time) : 'TBD');
+            : (m.kickoff_time ? fmtTime(m.kickoff_time, m.match_date) : 'TBD');
 
           return `<div class="match-card${nor ? ' norway' : ''}">
             <div class="match-row">
