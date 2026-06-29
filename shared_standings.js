@@ -31,7 +31,7 @@ function computeStandings(teams, schedule) {
   // Process finished group-stage matches
   schedule.forEach(m => {
     if (m.status !== 'FT') return;
-    if (!m.group_name) return;
+    if (!m.group_name || !m.group_name.startsWith('Group')) return;
     const home = normalizeTeamName(m.home_team);
     const away = normalizeTeamName(m.away_team);
     const hs = m.home_score ?? 0, as = m.away_score ?? 0;

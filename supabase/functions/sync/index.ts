@@ -339,7 +339,7 @@ function resolveR32Slot(
   })
 
   schedule.forEach(m => {
-    if (m.status !== 'FT' || !m.group_name) return
+    if (m.status !== 'FT' || !m.group_name || !m.group_name.startsWith('Group')) return
     const home = normalizeScheduleTeam(m.home_team)
     const away = normalizeScheduleTeam(m.away_team)
     const hs = m.home_score ?? 0, as = m.away_score ?? 0
@@ -825,6 +825,8 @@ Deno.serve(async (req) => {
       let slotUpdates = 0
       for (const g of koGames) {
         if (!g.home_slot) continue
+        // Don't re-resolve slots for games that already have results
+        if (g.result) continue
         let newHome = g.home, newAway = g.away
 
         if (g.round === 'R32' && teams && sched) {
