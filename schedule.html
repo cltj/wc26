@@ -150,6 +150,9 @@ function fmtTime(t, d) {
   const dt = new Date(`${d||'2026-06-15'}T${t}Z`);
   return dt.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Oslo'});
 }
+function osloDate(iso) { return new Date(iso).toLocaleDateString('sv-SE',{timeZone:'Europe/Oslo'}); }
+function todayOslo() { return new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Oslo'}); }
+function schedOsloDate(m) { return m.kickoff_time ? osloDate(`${m.match_date}T${m.kickoff_time}Z`) : m.match_date; }
 
 async function loadSchedule() {
   try {
@@ -196,17 +199,18 @@ function render() {
     <div class="stat-item"><div class="val">${avgGoals}</div><div class="lbl">Per match</div></div>
   `;
 
-  // Group by date
+  // Group by Oslo date
   const byDate = {};
   matches.forEach(m => {
-    if (!byDate[m.match_date]) byDate[m.match_date] = [];
-    byDate[m.match_date].push(m);
+    const d = schedOsloDate(m);
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push(m);
   });
   const dates = Object.keys(byDate).sort();
 
   // Date nav
-  const today = new Date().toISOString().slice(0, 10);
-  const allDates = [...new Set(allMatches.map(m => m.match_date))].sort();
+  const today = todayOslo();
+  const allDates = [...new Set(allMatches.map(m => schedOsloDate(m)))].sort();
   document.getElementById('date-nav').innerHTML = allDates.map(d => {
     const dt = new Date(d + 'T00:00:00');
     const isToday = d === today;

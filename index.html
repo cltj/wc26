@@ -266,6 +266,8 @@ const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fmtDate(d) { const dt = new Date(d+'T00:00:00'); return `${DOW[dt.getDay()]} ${dt.getDate()} ${MONTHS[dt.getMonth()]}`; }
 function fmtTime(t, d) { if (!t) return ''; const dt = new Date(`${d||'2026-06-15'}T${t}Z`); return dt.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Oslo'}); }
+function osloDate(iso) { return new Date(iso).toLocaleDateString('sv-SE',{timeZone:'Europe/Oslo'}); }
+function todayOslo() { return new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Oslo'}); }
 function flagFor(team) { return FLAG_MAP[team] || FLAG_MAP[TEAM_ALIAS[team]] || ''; }
 function scrollToDate(date) {
   // Check which section has this date
@@ -469,11 +471,22 @@ function renderGames() {
   const gameLookup = buildGameLookup();
   schedIdLookup = buildSchedIdLookup();
 
-  // Group schedule by date
+  // Group schedule by Oslo date
   const byDate = {};
+  const gameLookupByTeam = {};
+  allGames.forEach(g => {
+    gameLookupByTeam[`${normTeam(g.home)}|${normTeam(g.away)}`] = g;
+    gameLookupByTeam[`${normTeam(g.away)}|${normTeam(g.home)}`] = g;
+  });
   scheduleData.forEach(m => {
-    if (!byDate[m.match_date]) byDate[m.match_date] = [];
-    byDate[m.match_date].push(m);
+    const h = normTeam(m.home_team), a = normTeam(m.away_team);
+    const game = gameLookupByTeam[`${h}|${a}`];
+    // Use game kickoff (proper UTC timestamp) if available, else schedule date+time
+    const d = game?.kickoff ? osloDate(game.kickoff)
+            : m.kickoff_time ? osloDate(`${m.match_date}T${m.kickoff_time}Z`)
+            : m.match_date;
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push(m);
   });
 
   // Also add prediction games that aren't in schedule (knockout slots etc)
@@ -487,13 +500,13 @@ function renderGames() {
     return !schedTeamKeys.has(key);
   });
   unmatchedGames.forEach(g => {
-    const d = g.kickoff ? g.kickoff.slice(0,10) : '9999-99-99';
+    const d = g.kickoff ? osloDate(g.kickoff) : '9999-99-99';
     if (!byDate[d]) byDate[d] = [];
     byDate[d].push({_predGame: g});
   });
 
   const dates = Object.keys(byDate).sort();
-  const today = new Date().toISOString().slice(0,10);
+  const today = todayOslo();
 
   // Date nav
   document.getElementById('date-nav').innerHTML = dates.map(d => {
