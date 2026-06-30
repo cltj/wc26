@@ -808,7 +808,7 @@ Deno.serve(async (req) => {
     // Fetch all knockout prediction games and resolve placeholder team names
     const { data: koGames } = await supabase
       .from('games')
-      .select('id,home,away,home_slot,away_slot,round,result')
+      .select('id,home,away,home_slot,away_slot,round,result,advancer')
       .neq('round', 'group')
       .order('id')
 
@@ -825,8 +825,8 @@ Deno.serve(async (req) => {
       let slotUpdates = 0
       for (const g of koGames) {
         if (!g.home_slot) continue
-        // Don't re-resolve slots for games that already have results
-        if (g.result) continue
+        // Don't re-resolve slots for games that already have results or advancers
+        if (g.result || g.advancer) continue
         let newHome = g.home, newAway = g.away
 
         if (g.round === 'R32' && teams && sched) {
