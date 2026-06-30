@@ -343,15 +343,28 @@ function badgeHtml(game, pred) {
   return `<span class="badge badge-0">✗ 0 pts</span>`;
 }
 
-// Build a lookup: "normHome|normAway" -> game object (for matching schedule to prediction games)
+// Build a lookup: "normHome|normAway" -> array of game objects (for matching schedule to prediction games)
 function buildGameLookup() {
   const lookup = {};
   allGames.forEach(g => {
     const h = normTeam(g.home), a = normTeam(g.away);
-    lookup[`${h}|${a}`] = g;
-    lookup[`${a}|${h}`] = g;
+    const k1 = `${h}|${a}`, k2 = `${a}|${h}`;
+    (lookup[k1] = lookup[k1] || []).push(g);
+    (lookup[k2] = lookup[k2] || []).push(g);
   });
   return lookup;
+}
+// Find the best matching game for a schedule entry (closest kickoff date)
+function findGame(gameLookup, schedMatch) {
+  const h = normTeam(schedMatch.home_team), a = normTeam(schedMatch.away_team);
+  const games = gameLookup[`${h}|${a}`];
+  if (!games || !games.length) return null;
+  if (games.length === 1) return games[0];
+  const sd = new Date(schedMatch.kickoff_time ? `${schedMatch.match_date}T${schedMatch.kickoff_time}Z` : `${schedMatch.match_date}T12:00:00Z`).getTime();
+  return games.reduce((best, g) => {
+    const gd = new Date(g.kickoff).getTime();
+    return Math.abs(gd - sd) < Math.abs(new Date(best.kickoff).getTime() - sd) ? g : best;
+  });
 }
 
 // Build lookup: "normHome|normAway" -> schedule.id
@@ -473,14 +486,8 @@ function renderGames() {
 
   // Group schedule by Oslo date
   const byDate = {};
-  const gameLookupByTeam = {};
-  allGames.forEach(g => {
-    gameLookupByTeam[`${normTeam(g.home)}|${normTeam(g.away)}`] = g;
-    gameLookupByTeam[`${normTeam(g.away)}|${normTeam(g.home)}`] = g;
-  });
   scheduleData.forEach(m => {
-    const h = normTeam(m.home_team), a = normTeam(m.away_team);
-    const game = gameLookupByTeam[`${h}|${a}`];
+    const game = findGame(gameLookup, m);
     // Use game kickoff (proper UTC timestamp) if available, else schedule date+time
     const d = game?.kickoff ? osloDate(game.kickoff)
             : m.kickoff_time ? osloDate(`${m.match_date}T${m.kickoff_time}Z`)
@@ -489,16 +496,13 @@ function renderGames() {
     byDate[d].push(m);
   });
 
-  // Also add prediction games that aren't in schedule (knockout slots etc)
-  const schedTeamKeys = new Set();
+  // Also add prediction games that aren't matched to any schedule entry
+  const matchedGameIds = new Set();
   scheduleData.forEach(m => {
-    schedTeamKeys.add(`${normTeam(m.home_team)}|${normTeam(m.away_team)}`);
-    schedTeamKeys.add(`${normTeam(m.away_team)}|${normTeam(m.home_team)}`);
+    const game = findGame(gameLookup, m);
+    if (game) matchedGameIds.add(game.id);
   });
-  const unmatchedGames = allGames.filter(g => {
-    const key = `${normTeam(g.home)}|${normTeam(g.away)}`;
-    return !schedTeamKeys.has(key);
-  });
+  const unmatchedGames = allGames.filter(g => !matchedGameIds.has(g.id));
   unmatchedGames.forEach(g => {
     const d = g.kickoff ? osloDate(g.kickoff) : '9999-99-99';
     if (!byDate[d]) byDate[d] = [];
@@ -522,8 +526,7 @@ function renderGames() {
   const isFinished = (m) => {
     if (m._predGame) return !!m._predGame.result;
     if (m.status === 'FT') return true;
-    const h = normTeam(m.home_team), a = normTeam(m.away_team);
-    const game = gameLookup[`${h}|${a}`];
+    const game = findGame(gameLookup, m);
     return game && !!game.result;
   };
 
@@ -538,8 +541,7 @@ function renderGames() {
       if (m._predGame) { renderedGameIds.add(m._predGame.id); return renderPredGame(m._predGame); }
 
       // Check if this schedule match has a corresponding prediction game
-      const h = normTeam(m.home_team), a = normTeam(m.away_team);
-      const game = gameLookup[`${h}|${a}`];
+      const game = findGame(gameLookup, m);
       if (game && !renderedGameIds.has(game.id)) { renderedGameIds.add(game.id); return renderPredGame(game); }
       if (game && renderedGameIds.has(game.id)) return ''; // already rendered
 
