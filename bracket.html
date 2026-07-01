@@ -8,6 +8,14 @@
 <style>
 .bracket-note { font-size:12px; color:var(--dim); margin-bottom:20px; }
 #bracket-wrap { overflow-x:auto; padding-bottom:16px; }
+.round-filters { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+.round-filters button {
+  padding:6px 16px; border:1px solid rgba(255,255,255,0.12); border-radius:6px;
+  background:#0e2718; color:#8a9aa0; font-family:'Inter',sans-serif; font-size:13px;
+  cursor:pointer; transition:all .15s;
+}
+.round-filters button.active { background:#0d5228; color:#f0b429; border-color:#f0b429; }
+.round-filters button:hover:not(.active) { background:#143a24; }
 </style>
 </head>
 <body>
@@ -19,6 +27,13 @@
   </div>
 
   <p class="bracket-note">Group stage ends 27 Jun · R32 starts 28 Jun · Final 19 Jul at MetLife Stadium, New York</p>
+  <div class="round-filters" id="round-filters">
+    <button class="active" data-round="all">All</button>
+    <button data-round="R32">R32</button>
+    <button data-round="R16">R16</button>
+    <button data-round="QF">QF</button>
+    <button data-round="SF">SF / Final</button>
+  </div>
   <div id="bracket-wrap"><div id="bracket" style="color:var(--dim);text-align:center;padding:40px">Loading bracket…</div></div>
 </div>
 
@@ -127,25 +142,38 @@ function buildBracket(r32Data, rounds) {
     });
   });
 
-  function drawMatch(x,yC,tl,tt,bl,bt){
+  function drawMatch(x,yC,tl,tt,bl,bt,result,round){
     const y=yC-SH-GAP/2,h=SH*2+GAP;
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    if(round) g.setAttribute('data-round',round);
     const card=document.createElementNS('http://www.w3.org/2000/svg','rect');
     Object.entries({x,y,width:CW,height:h,rx:6,fill:'#0e2718',stroke:'rgba(255,255,255,0.07)','stroke-width':1}).forEach(([k,v])=>card.setAttribute(k,v));
-    svg.appendChild(card);
+    g.appendChild(card);
     const div=document.createElementNS('http://www.w3.org/2000/svg','line');
     Object.entries({x1:x+6,y1:yC,x2:x+CW-6,y2:yC,stroke:'rgba(255,255,255,0.07)','stroke-width':1}).forEach(([k,v])=>div.setAttribute(k,v));
-    svg.appendChild(div);
-    [[tl,tt,yC-SH/2],[bl,bt,yC+SH/2]].forEach(([lbl,name,my])=>{
+    g.appendChild(div);
+    // Parse result scores
+    let topScore=null, botScore=null;
+    if(result){
+      const parts=result.split('-');
+      if(parts.length===2){ topScore=parts[0]; botScore=parts[1]; }
+    }
+    [[tl,tt,yC-SH/2,topScore],[bl,bt,yC+SH/2,botScore]].forEach(([lbl,name,my,score])=>{
       const l=document.createElementNS('http://www.w3.org/2000/svg','text');
       Object.entries({x:x+8,y:my-6,fill:'#8a9aa0','font-size':8,'font-family':'Inter,sans-serif'}).forEach(([k,v])=>l.setAttribute(k,v));
-      l.textContent=lbl; svg.appendChild(l);
+      l.textContent=lbl; g.appendChild(l);
       const n=document.createElementNS('http://www.w3.org/2000/svg','text');
       const isTBD=!name;
-      const displayName = name || '—';
       const flag = name ? (FLAG_MAP[name] || '') + ' ' : '';
       Object.entries({x:x+8,y:my+8,fill:isTBD?'#8a9aa0':'#f5f7f2','font-size':isTBD?10:11,'font-weight':isTBD?400:600,'font-family':'Inter,sans-serif'}).forEach(([k,v])=>n.setAttribute(k,v));
-      n.textContent=isTBD?'—':flag+displayName; svg.appendChild(n);
+      n.textContent=isTBD?'—':flag+name; g.appendChild(n);
+      if(score!==null){
+        const s=document.createElementNS('http://www.w3.org/2000/svg','text');
+        Object.entries({x:x+CW-10,y:my+8,fill:'#f0b429','font-size':13,'font-weight':700,'font-family':'JetBrains Mono,monospace','text-anchor':'end'}).forEach(([k,v])=>s.setAttribute(k,v));
+        s.textContent=score; g.appendChild(s);
+      }
     });
+    svg.appendChild(g);
     return {rightX:x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8};
   }
 
@@ -159,7 +187,7 @@ function buildBracket(r32Data, rounds) {
 
   // R32
   const r32c = r32Data.map((m,i) =>
-    drawMatch(CG, HDRH+matchH*i+matchH/2, m.topLabel, m.topTeam, m.botLabel, m.botTeam)
+    drawMatch(CG, HDRH+matchH*i+matchH/2, m.topLabel, m.topTeam, m.botLabel, m.botTeam, m.result, 'R32')
   );
 
   // R16
@@ -171,7 +199,7 @@ function buildBracket(r32Data, rounds) {
     const tl = g?.home_slot||('W M'+(i*2+1)), bl = g?.away_slot||('W M'+(i*2+2));
     const tt = g ? teamOrNull(g.home, g.home_slot) : null;
     const bt = g ? teamOrNull(g.away, g.away_slot) : null;
-    drawMatch(r16x,yC,tl,tt,bl,bt);
+    drawMatch(r16x,yC,tl,tt,bl,bt,g?.result||null,'R16');
     conn(t.rightX,t.topY,t.centerY,r16x,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,r16x,yC+SH/2+8);
     r16c.push({rightX:r16x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
@@ -185,7 +213,7 @@ function buildBracket(r32Data, rounds) {
     const tl = g?.home_slot||('W R16-'+(i*2+1)), bl = g?.away_slot||('W R16-'+(i*2+2));
     const tt = g ? teamOrNull(g.home, g.home_slot) : null;
     const bt = g ? teamOrNull(g.away, g.away_slot) : null;
-    drawMatch(qfx,yC,tl,tt,bl,bt);
+    drawMatch(qfx,yC,tl,tt,bl,bt,g?.result||null,'QF');
     conn(t.rightX,t.topY,t.centerY,qfx,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,qfx,yC+SH/2+8);
     qfc.push({rightX:qfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
@@ -199,7 +227,7 @@ function buildBracket(r32Data, rounds) {
     const tl = g?.home_slot||('W QF-'+(i*2+1)), bl = g?.away_slot||('W QF-'+(i*2+2));
     const tt = g ? teamOrNull(g.home, g.home_slot) : null;
     const bt = g ? teamOrNull(g.away, g.away_slot) : null;
-    drawMatch(sfx,yC,tl,tt,bl,bt);
+    drawMatch(sfx,yC,tl,tt,bl,bt,g?.result||null,'SF');
     conn(t.rightX,t.topY,t.centerY,sfx,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,sfx,yC+SH/2+8);
     sfc.push({rightX:sfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
@@ -208,7 +236,7 @@ function buildBracket(r32Data, rounds) {
   // Final
   const finx=sfx+CW+CG, finY=(sfc[0].centerY+sfc[1].centerY)/2;
   const fg = rounds.F[0];
-  drawMatch(finx,finY,fg?.home_slot||'W SF-1',fg?teamOrNull(fg.home,fg.home_slot):null,fg?.away_slot||'W SF-2',fg?teamOrNull(fg.away,fg.away_slot):null);
+  drawMatch(finx,finY,fg?.home_slot||'W SF-1',fg?teamOrNull(fg.home,fg.home_slot):null,fg?.away_slot||'W SF-2',fg?teamOrNull(fg.away,fg.away_slot):null,fg?.result||null,'F');
   conn(sfc[0].rightX,sfc[0].topY,sfc[0].centerY,finx,finY-SH/2+8);
   conn(sfc[1].rightX,sfc[1].centerY,sfc[1].botY,finx,finY+SH/2+8);
 
@@ -222,7 +250,7 @@ function buildBracket(r32Data, rounds) {
   // 3rd place match
   const thirdY=finY+SH*2+GAP*4;
   const tg = rounds['3rd']?.[0];
-  drawMatch(finx,thirdY,tg?.home_slot||'L SF-1',tg?teamOrNull(tg.home,tg.home_slot):null,tg?.away_slot||'L SF-2',tg?teamOrNull(tg.away,tg.away_slot):null);
+  drawMatch(finx,thirdY,tg?.home_slot||'L SF-1',tg?teamOrNull(tg.home,tg.home_slot):null,tg?.away_slot||'L SF-2',tg?teamOrNull(tg.away,tg.away_slot):null,tg?.result||null,'F');
   addTxt(finx+CW/2,thirdY-SH-GAP-6,'3RD PLACE · 18 Jul','#c07840',10);
 
   svg.setAttribute('height',Math.max(thirdY+SH+GAP+20,svgH));
@@ -230,6 +258,29 @@ function buildBracket(r32Data, rounds) {
 }
 
 loadBracket();
+
+// Round filter buttons
+document.getElementById('round-filters').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  document.querySelectorAll('#round-filters button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const round = btn.dataset.round;
+  const svg = document.querySelector('#bracket svg');
+  if (!svg) return;
+  // Map filter to visible rounds
+  const visibleMap = {
+    'all': null,
+    'R32': ['R32'],
+    'R16': ['R16'],
+    'QF': ['QF'],
+    'SF': ['SF','F'],
+  };
+  const visible = visibleMap[round];
+  svg.querySelectorAll('g[data-round]').forEach(g => {
+    g.style.opacity = !visible || visible.includes(g.dataset.round) ? '1' : '0.08';
+  });
+});
 </script>
 </body>
 </html>
