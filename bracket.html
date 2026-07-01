@@ -38,33 +38,72 @@ const ROUNDS = [
 
 async function loadBracket() {
   try {
-    // Load R32 games directly from database - they have actual team names
-    const r32Games = await sb('games?round=eq.R32&select=id,home,away,home_slot,away_slot,kickoff,result&order=kickoff');
-    
-    // Map R32_STRUCTURE slots to actual games from database
+    const allKO = await sb('games?round=neq.group&select=id,home,away,home_slot,away_slot,kickoff,result,round,advancer&order=id');
+    const byId = {};
+    allKO.forEach(g => byId[g.id] = g);
+
+    // R32: map structure slots to actual games
+    const r32Games = allKO.filter(g => g.round === 'R32');
     const r32Resolved = R32_STRUCTURE.map(slot => {
-      // Find the game matching these slots
-      const game = r32Games.find(g => 
-        g.home_slot === slot.top && g.away_slot === slot.bot
-      );
+      const game = r32Games.find(g => g.home_slot === slot.top && g.away_slot === slot.bot);
       return {
         topLabel: slot.top,
-        topTeam: game?.home || null,  // Use actual team name from DB
+        topTeam: game?.home || null,
         botLabel: slot.bot,
-        botTeam: game?.away || null,  // Use actual team name from DB
+        botTeam: game?.away || null,
         date: slot.date,
         result: game?.result || null,
       };
     });
 
-    buildBracket(r32Resolved);
+    // Helper: get team name if known (not a slot placeholder)
+    const teamOrNull = (name, slot) => (name && name !== slot) ? name : null;
+
+    // R16: order must match bracket pairs (R32[0]+R32[1]→R16[0], etc.)
+    // Build expected R16 order from R32 game IDs
+    const r16BySlot = {};
+    allKO.filter(g => g.round === 'R16').forEach(g => r16BySlot[g.home_slot] = g);
+    const r16Ordered = [];
+    for (let i = 0; i < 16; i += 2) {
+      const r32Top = r32Games.find(g => g.home_slot === R32_STRUCTURE[i].top && g.away_slot === R32_STRUCTURE[i].bot);
+      if (r32Top) {
+        const slot = 'W' + r32Top.id;
+        r16Ordered.push(r16BySlot[slot] || null);
+      } else {
+        r16Ordered.push(null);
+      }
+    }
+
+    // Order later rounds by following the bracket tree
+    const orderBySlots = (games, prevOrdered) => {
+      const bySlot = {};
+      games.forEach(g => bySlot[g.home_slot] = g);
+      return prevOrdered.filter(Boolean).reduce((acc, g, i) => {
+        if (i % 2 === 0) acc.push(bySlot['W' + g.id] || null);
+        return acc;
+      }, []);
+    };
+    const qfGames = allKO.filter(g => g.round === 'QF');
+    const sfGames = allKO.filter(g => g.round === 'SF');
+    const qfOrdered = orderBySlots(qfGames, r16Ordered);
+    const sfOrdered = orderBySlots(sfGames, qfOrdered);
+
+    const rounds = {
+      R16: r16Ordered,
+      QF: qfOrdered,
+      SF: sfOrdered,
+      F: allKO.filter(g => g.round === 'F').sort((a,b) => a.id - b.id),
+      '3rd': allKO.filter(g => g.round === '3rd').sort((a,b) => a.id - b.id),
+    };
+
+    buildBracket(r32Resolved, rounds);
   } catch(e) {
     document.getElementById('bracket').innerHTML =
       `<div style="color:var(--dim);text-align:center;padding:40px">Error: ${e.message}</div>`;
   }
 }
 
-function buildBracket(r32Data) {
+function buildBracket(r32Data, rounds) {
   const wrap = document.getElementById('bracket');
   wrap.innerHTML = '';
   const SH=52,GAP=8,CW=148,CG=32,HDRH=44;
@@ -124,10 +163,15 @@ function buildBracket(r32Data) {
   );
 
   // R16
+  const teamOrNull = (name, slot) => (name && name !== slot) ? name : null;
   const r16x=CG+CW+CG, r16c=[];
   for(let i=0;i<8;i++){
     const t=r32c[i*2],b=r32c[i*2+1],yC=(t.centerY+b.centerY)/2;
-    drawMatch(r16x,yC,'W M'+(i*2+1),'','W M'+(i*2+2),'');
+    const g = rounds.R16[i];
+    const tl = g?.home_slot||('W M'+(i*2+1)), bl = g?.away_slot||('W M'+(i*2+2));
+    const tt = g ? teamOrNull(g.home, g.home_slot) : null;
+    const bt = g ? teamOrNull(g.away, g.away_slot) : null;
+    drawMatch(r16x,yC,tl,tt,bl,bt);
     conn(t.rightX,t.topY,t.centerY,r16x,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,r16x,yC+SH/2+8);
     r16c.push({rightX:r16x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
@@ -137,7 +181,11 @@ function buildBracket(r32Data) {
   const qfx=r16x+CW+CG, qfc=[];
   for(let i=0;i<4;i++){
     const t=r16c[i*2],b=r16c[i*2+1],yC=(t.centerY+b.centerY)/2;
-    drawMatch(qfx,yC,'W R16-'+(i*2+1),'','W R16-'+(i*2+2),'');
+    const g = rounds.QF[i];
+    const tl = g?.home_slot||('W R16-'+(i*2+1)), bl = g?.away_slot||('W R16-'+(i*2+2));
+    const tt = g ? teamOrNull(g.home, g.home_slot) : null;
+    const bt = g ? teamOrNull(g.away, g.away_slot) : null;
+    drawMatch(qfx,yC,tl,tt,bl,bt);
     conn(t.rightX,t.topY,t.centerY,qfx,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,qfx,yC+SH/2+8);
     qfc.push({rightX:qfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
@@ -147,7 +195,11 @@ function buildBracket(r32Data) {
   const sfx=qfx+CW+CG, sfc=[];
   for(let i=0;i<2;i++){
     const t=qfc[i*2],b=qfc[i*2+1],yC=(t.centerY+b.centerY)/2;
-    drawMatch(sfx,yC,'W QF-'+(i*2+1),'','W QF-'+(i*2+2),'');
+    const g = rounds.SF[i];
+    const tl = g?.home_slot||('W QF-'+(i*2+1)), bl = g?.away_slot||('W QF-'+(i*2+2));
+    const tt = g ? teamOrNull(g.home, g.home_slot) : null;
+    const bt = g ? teamOrNull(g.away, g.away_slot) : null;
+    drawMatch(sfx,yC,tl,tt,bl,bt);
     conn(t.rightX,t.topY,t.centerY,sfx,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,sfx,yC+SH/2+8);
     sfc.push({rightX:sfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
@@ -155,7 +207,8 @@ function buildBracket(r32Data) {
 
   // Final
   const finx=sfx+CW+CG, finY=(sfc[0].centerY+sfc[1].centerY)/2;
-  drawMatch(finx,finY,'W SF-1','','W SF-2','');
+  const fg = rounds.F[0];
+  drawMatch(finx,finY,fg?.home_slot||'W SF-1',fg?teamOrNull(fg.home,fg.home_slot):null,fg?.away_slot||'W SF-2',fg?teamOrNull(fg.away,fg.away_slot):null);
   conn(sfc[0].rightX,sfc[0].topY,sfc[0].centerY,finx,finY-SH/2+8);
   conn(sfc[1].rightX,sfc[1].centerY,sfc[1].botY,finx,finY+SH/2+8);
 
@@ -168,7 +221,8 @@ function buildBracket(r32Data) {
 
   // 3rd place match
   const thirdY=finY+SH*2+GAP*4;
-  drawMatch(finx,thirdY,'L SF-1','','L SF-2','');
+  const tg = rounds['3rd']?.[0];
+  drawMatch(finx,thirdY,tg?.home_slot||'L SF-1',tg?teamOrNull(tg.home,tg.home_slot):null,tg?.away_slot||'L SF-2',tg?teamOrNull(tg.away,tg.away_slot):null);
   addTxt(finx+CW/2,thirdY-SH-GAP-6,'3RD PLACE · 18 Jul','#c07840',10);
 
   svg.setAttribute('height',Math.max(thirdY+SH+GAP+20,svgH));
