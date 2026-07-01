@@ -257,7 +257,7 @@ injectNav('index');
 const rankLabel = ['🥇 1st','🥈 2nd','🥉 3rd','4th','5th','6th','7th'];
 const rankClass = ['rank-1','rank-2','rank-3','rank-4','rank-5','rank-6','rank-7'];
 const ROUND_LABELS = {group:'Group',R32:'Round of 32',R16:'Round of 16',QF:'Quarter-final',SF:'Semi-final','3rd':'3rd Place',F:'Final'};
-let allGames = [], allPredictions = [], teamData = {}, scheduleData = [], playerPhotos = {};
+let allGames = [], allPredictions = [], teamData = {}, scheduleData = [], playerPhotos = {}, roundLocks = {};
 
 const TEAM_ALIAS = {'Korea Republic':'South Korea','Bosnia and Herzegovina':'Bosnia & Herz.','Bosnia-Herzegovina':'Bosnia & Herz.','Ivory Coast':"Côte d'Ivoire",'Iran':'IR Iran','Cape Verde':'Cabo Verde','Democratic Republic of the Congo':'DR Congo','Congo DR':'DR Congo','United States':'USA','Turkey':'Türkiye','Czech Republic':'Czechia'};
 function normTeam(n) { return TEAM_ALIAS[n]||n; }
@@ -287,16 +287,18 @@ function scrollToDate(date) {
 }
 
 async function load() {
-  const [games, preds, teams, sched, participants] = await Promise.all([
+  const [games, preds, teams, sched, participants, lockRows] = await Promise.all([
     sb('games?select=*&order=id'),
     sb('predictions?select=*'),
     sb('teams?select=name,group_letter,confederation,last_formation,last_starting_xi&order=name'),
     sb('schedule?select=*&order=match_date,kickoff_time,id'),
     sb('participants?select=name,photo_url'),
+    sb('sync_state?key=eq.round_locks&select=value'),
   ]);
   allGames = games;
   allPredictions = preds;
   scheduleData = sched;
+  roundLocks = lockRows?.[0]?.value || {};
   teams.forEach(t => teamData[t.name] = t);
   participants.forEach(p => playerPhotos[p.name] = p.photo_url);
   document.getElementById('subtitle').textContent = CONTENDERS.join(' · ');
@@ -389,7 +391,8 @@ function renderPredGame(g) {
   const teamsKnown = homeKnown && awayKnown;
   // isSlot = knockout game with at least one undetermined team (predictions locked)
   const isSlot = ko && !teamsKnown;
-  const locked = new Date() >= new Date(g.kickoff) || isSlot;
+  const roundLocked = ko && g.round && roundLocks[g.round] !== 'open';
+  const locked = new Date() >= new Date(g.kickoff) || isSlot || roundLocked;
   const norway = [g.home,g.away].some(t => t.toLowerCase()==='norway' || t.toLowerCase()==='iraq');
   const kickoff = new Date(g.kickoff);
   const timeStr = kickoff.toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'});
@@ -419,7 +422,8 @@ function renderPredGame(g) {
   if (user && !isSlot) {
     const myP = allPredictions.find(p => p.game_id===g.id && p.participant===user);
     if (locked) {
-      inputHtml = `<div class="pred-inp-row"><span class="locked-msg">🔒 Locked — game has started</span></div>`;
+      const reason = new Date() >= new Date(g.kickoff) ? 'game has started' : roundLocked ? 'round not open yet' : '';
+      inputHtml = `<div class="pred-inp-row"><span class="locked-msg">🔒 Locked — ${reason}</span></div>`;
     } else {
       const myVal = myP?.prediction || '';
       const showWinner = ko && isDraw(myVal);

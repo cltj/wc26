@@ -42,6 +42,16 @@
   <div id="admin-content">
     <div class="admin-grid">
 
+      <!-- Round Locks -->
+      <div class="admin-box">
+        <div class="admin-label">Round Locks</div>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:12px">
+          Control when participants can submit predictions for each knockout round. Games also auto-lock at kickoff.
+        </p>
+        <div id="round-locks" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+        <div class="admin-note">Open a round when matchups are confirmed. Predictions also lock automatically at each game's kickoff time.</div>
+      </div>
+
       <!-- Enter result -->
       <div class="admin-box">
         <div class="admin-label">Enter Game Result</div>
@@ -111,11 +121,42 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('access-denied').style.display = 'block';
   } else {
     loadGames();
+    loadRoundLocks();
     loadSyncHistory();
   }
 });
 
 let allGames = [];
+const KO_ROUNDS = ['R32','R16','QF','SF','F'];
+const KO_LABELS = {R32:'Round of 32',R16:'Round of 16',QF:'Quarter-finals',SF:'Semi-finals',F:'Final'};
+let roundLocks = {};
+
+async function loadRoundLocks() {
+  try {
+    const rows = await sb('sync_state?key=eq.round_locks&select=value');
+    roundLocks = rows?.[0]?.value || {};
+  } catch(e) { roundLocks = {}; }
+  renderRoundLocks();
+}
+
+function renderRoundLocks() {
+  document.getElementById('round-locks').innerHTML = KO_ROUNDS.map(r => {
+    const isOpen = roundLocks[r] === 'open';
+    return `<button class="btn ${isOpen ? 'btn-green' : 'btn-dim'}" style="min-width:120px;font-size:12px" onclick="toggleRoundLock('${r}')">
+      ${isOpen ? '🔓' : '🔒'} ${KO_LABELS[r]} ${isOpen ? 'OPEN' : 'LOCKED'}
+    </button>`;
+  }).join('');
+}
+
+async function toggleRoundLock(round) {
+  const isOpen = roundLocks[round] === 'open';
+  roundLocks[round] = isOpen ? 'locked' : 'open';
+  renderRoundLocks();
+  await sbAdmin('sync_state?key=eq.round_locks', {
+    method: 'PATCH',
+    body: JSON.stringify({ value: roundLocks })
+  });
+}
 
 async function loadGames() {
   allGames = await sb('games?select=*&order=id');
