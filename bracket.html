@@ -16,6 +16,23 @@
 }
 .round-filters button.active { background:#0d5228; color:#f0b429; border-color:#f0b429; }
 .round-filters button:hover:not(.active) { background:#143a24; }
+.compact-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
+.compact-card {
+  background:#0e2718; border:1px solid rgba(255,255,255,0.07); border-radius:8px;
+  padding:0; overflow:hidden;
+}
+.compact-card .cc-header {
+  background:#0d5228; padding:4px 10px; font-family:'Bebas Neue',sans-serif;
+  color:#f0b429; font-size:11px; letter-spacing:0.5px;
+}
+.compact-card .cc-row {
+  display:flex; align-items:center; padding:8px 10px; gap:6px;
+}
+.compact-card .cc-row+.cc-row { border-top:1px solid rgba(255,255,255,0.07); }
+.compact-card .cc-slot { font-size:8px; color:#8a9aa0; width:48px; flex-shrink:0; font-family:'Inter',sans-serif; }
+.compact-card .cc-team { flex:1; font-size:12px; font-family:'Inter',sans-serif; color:#f5f7f2; font-weight:600; }
+.compact-card .cc-team.tbd { color:#8a9aa0; font-weight:400; font-size:10px; }
+.compact-card .cc-score { font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:#f0b429; }
 </style>
 </head>
 <body>
@@ -111,6 +128,8 @@ async function loadBracket() {
       '3rd': allKO.filter(g => g.round === '3rd').sort((a,b) => a.id - b.id),
     };
 
+    // Store for filter re-rendering
+    window._bracketData = { r32: r32Resolved, rounds };
     buildBracket(r32Resolved, rounds);
   } catch(e) {
     document.getElementById('bracket').innerHTML =
@@ -259,6 +278,59 @@ function buildBracket(r32Data, rounds) {
 
 loadBracket();
 
+function getMatchesForRound(filter) {
+  const d = window._bracketData;
+  if (!d) return [];
+  const teamOrNull = (name, slot) => (name && name !== slot) ? name : null;
+  const ROUND_NAMES = { R32:'Round of 32', R16:'Round of 16', QF:'Quarter-finals', SF:'Semi-finals / Final' };
+  if (filter === 'R32') {
+    return d.r32.map(m => ({
+      topLabel:m.topLabel, topTeam:m.topTeam, botLabel:m.botLabel, botTeam:m.botTeam, result:m.result, roundName:ROUND_NAMES.R32
+    }));
+  }
+  const extract = (arr, rnd) => (arr||[]).filter(Boolean).map(g => ({
+    topLabel:g.home_slot, topTeam:teamOrNull(g.home,g.home_slot),
+    botLabel:g.away_slot, botTeam:teamOrNull(g.away,g.away_slot),
+    result:g.result||null, roundName:rnd
+  }));
+  if (filter === 'R16') return extract(d.rounds.R16, ROUND_NAMES.R16);
+  if (filter === 'QF') return extract(d.rounds.QF, ROUND_NAMES.QF);
+  if (filter === 'SF') {
+    return [
+      ...extract(d.rounds.SF, 'Semi-finals'),
+      ...extract(d.rounds.F, 'Final'),
+      ...extract(d.rounds['3rd'], '3rd Place'),
+    ];
+  }
+  return [];
+}
+
+function renderCompact(matches) {
+  const wrap = document.getElementById('bracket');
+  wrap.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'compact-grid';
+  matches.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'compact-card';
+    const row = (label, team, score) => {
+      const flag = team ? (FLAG_MAP[team]||'') + ' ' : '';
+      return `<div class="cc-row">
+        <span class="cc-slot">${label}</span>
+        <span class="cc-team${team?'':' tbd'}">${team ? flag+team : '—'}</span>
+        ${score!==null ? `<span class="cc-score">${score}</span>` : ''}
+      </div>`;
+    };
+    let topScore=null, botScore=null;
+    if (m.result) { const p=m.result.split('-'); if(p.length===2){topScore=p[0];botScore=p[1];} }
+    card.innerHTML = `<div class="cc-header">${m.roundName||''}</div>`
+      + row(m.topLabel, m.topTeam, topScore)
+      + row(m.botLabel, m.botTeam, botScore);
+    grid.appendChild(card);
+  });
+  wrap.appendChild(grid);
+}
+
 // Round filter buttons
 document.getElementById('round-filters').addEventListener('click', e => {
   const btn = e.target.closest('button');
@@ -266,20 +338,12 @@ document.getElementById('round-filters').addEventListener('click', e => {
   document.querySelectorAll('#round-filters button').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const round = btn.dataset.round;
-  const svg = document.querySelector('#bracket svg');
-  if (!svg) return;
-  // Map filter to visible rounds
-  const visibleMap = {
-    'all': null,
-    'R32': ['R32'],
-    'R16': ['R16'],
-    'QF': ['QF'],
-    'SF': ['SF','F'],
-  };
-  const visible = visibleMap[round];
-  svg.querySelectorAll('g[data-round]').forEach(g => {
-    g.style.opacity = !visible || visible.includes(g.dataset.round) ? '1' : '0.08';
-  });
+  if (round === 'all') {
+    const d = window._bracketData;
+    if (d) buildBracket(d.r32, d.rounds);
+  } else {
+    renderCompact(getMatchesForRound(round));
+  }
 });
 </script>
 </body>
