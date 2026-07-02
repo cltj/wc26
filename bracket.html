@@ -109,7 +109,7 @@ async function loadBracket() {
     // R16: order must match bracket pairs (R32[0]+R32[1]→R16[0], etc.)
     // Build expected R16 order from R32 game IDs
     const r16BySlot = {};
-    allKO.filter(g => g.round === 'R16').forEach(g => r16BySlot[g.home_slot] = g);
+    allKO.filter(g => g.round === 'R16').forEach(g => { r16BySlot[g.home_slot] = g; r16BySlot[g.away_slot] = g; });
     const r16Ordered = [];
     for (let i = 0; i < 16; i += 2) {
       const r32Top = r32Games.find(g => g.home_slot === R32_STRUCTURE[i].top && g.away_slot === R32_STRUCTURE[i].bot);
@@ -124,7 +124,7 @@ async function loadBracket() {
     // Order later rounds by following the bracket tree
     const orderBySlots = (games, prevOrdered) => {
       const bySlot = {};
-      games.forEach(g => bySlot[g.home_slot] = g);
+      games.forEach(g => { bySlot[g.home_slot] = g; bySlot[g.away_slot] = g; });
       return prevOrdered.filter(Boolean).reduce((acc, g, i) => {
         if (i % 2 === 0) acc.push(bySlot['W' + g.id] || null);
         return acc;
