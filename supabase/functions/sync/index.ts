@@ -149,7 +149,8 @@ async function espnMatchWinner(eventId: string): Promise<string | null> {
 // Fetch regulation-time (90 min) score from ESPN linescores
 // Returns null if data unavailable; also returns advancer if game went to ET/pens
 async function espnRegulationResult(eventId: string): Promise<{
-  home: string, away: string, homeScore: number, awayScore: number, advancer: string | null
+  home: string, away: string, homeScore: number, awayScore: number,
+  advancer: string | null, penHome: number | null, penAway: number | null
 } | null> {
   const res = await fetch(`${ESPN_API}/summary?event=${eventId}`)
   if (!res.ok) return null
@@ -176,12 +177,28 @@ async function espnRegulationResult(eventId: string): Promise<{
 
   // If there are more than 2 periods, the game went to ET/pens — find winner
   let advancer: string | null = null
+  let penHome: number | null = null
+  let penAway: number | null = null
   if (homeLinescores.length > 2) {
     const winner = competitors.find((c: any) => c.winner === true)
     if (winner) advancer = mapEspnTeam(winner.team?.displayName || '')
+
+    // Detect penalty shootout: if ET score is still a draw, last period is penalties
+    // Sum all non-penalty periods first
+    const etPeriods = homeLinescores.length > 4 ? homeLinescores.length - 1 : homeLinescores.length
+    let homeET = 0, awayET = 0
+    for (let i = 0; i < etPeriods; i++) {
+      homeET += Number(homeLinescores[i]?.value ?? 0)
+      awayET += Number(awayLinescores[i]?.value ?? 0)
+    }
+    // If still tied after ET periods and there's an extra period, it's penalties
+    if (homeET === awayET && homeLinescores.length > etPeriods) {
+      penHome = Number(homeLinescores[homeLinescores.length - 1]?.value ?? 0)
+      penAway = Number(awayLinescores[awayLinescores.length - 1]?.value ?? 0)
+    }
   }
 
-  return { home, away, homeScore, awayScore, advancer }
+  return { home, away, homeScore, awayScore, advancer, penHome, penAway }
 }
 
 // ── Single ESPN fetch: extract lineups, events, and per-player data ──────────
@@ -555,14 +572,23 @@ Deno.serve(async (req) => {
                   updates.advancer = regResult.advancer
                   l(`  Game ${pg.id} draw after 90' — advancer: ${regResult.advancer}`)
                 }
-                // Store full-time score (incl. ET) when different from regulation
-                const wcFullScore = `${match.home_score}-${match.away_score}`
-                if (wcFullScore !== result) {
-                  // Orient ET score same as our home/away
+                // Store penalty result if detected
+                if (regResult.penHome !== null && regResult.penAway !== null) {
                   if (regResult.home === pg.home) {
-                    updates.et_result = wcFullScore
+                    updates.pen_result = `${regResult.penHome}-${regResult.penAway}`
                   } else {
-                    updates.et_result = `${match.away_score}-${match.home_score}`
+                    updates.pen_result = `${regResult.penAway}-${regResult.penHome}`
+                  }
+                  l(`  Game ${pg.id} penalties: ${updates.pen_result}`)
+                } else {
+                  // Store full-time score (incl. ET) when different from regulation
+                  const wcFullScore = `${match.home_score}-${match.away_score}`
+                  if (wcFullScore !== result) {
+                    if (regResult.home === pg.home) {
+                      updates.et_result = wcFullScore
+                    } else {
+                      updates.et_result = `${match.away_score}-${match.home_score}`
+                    }
                   }
                 }
               } else if (!pg.advancer) {
