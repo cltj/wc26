@@ -33,6 +33,7 @@
 .compact-card .cc-team { flex:1; font-size:12px; font-family:'Inter',sans-serif; color:#f5f7f2; font-weight:600; }
 .compact-card .cc-team.tbd { color:#8a9aa0; font-weight:400; font-size:10px; }
 .compact-card .cc-score { font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:#f0b429; }
+.compact-card .cc-elim { color:#5a6a60; }
 </style>
 </head>
 <body>
@@ -68,9 +69,19 @@ const ROUNDS = [
   {name:'Final', dates:'19 Jul'},
 ];
 
+// Determine which team advanced from a knockout game
+function getAdvancer(game) {
+  if (!game.result) return null;
+  if (game.advancer) return game.advancer;
+  const [h, a] = game.result.split('-').map(Number);
+  if (h > a) return game.home;
+  if (a > h) return game.away;
+  return null;
+}
+
 async function loadBracket() {
   try {
-    const allKO = await sb('games?round=neq.group&select=id,home,away,home_slot,away_slot,kickoff,result,round,advancer&order=id');
+    const allKO = await sb('games?round=neq.group&select=id,home,away,home_slot,away_slot,kickoff,result,round,advancer,et_result&order=id');
     const byId = {};
     allKO.forEach(g => byId[g.id] = g);
 
@@ -85,6 +96,8 @@ async function loadBracket() {
         botTeam: game?.away || null,
         date: slot.date,
         result: game?.result || null,
+        advancer: game ? getAdvancer(game) : null,
+        et_result: game?.et_result || null,
       };
     });
 
@@ -161,7 +174,9 @@ function buildBracket(r32Data, rounds) {
     });
   });
 
-  function drawMatch(x,yC,tl,tt,bl,bt,result,round){
+  function drawMatch(x,yC,tl,tt,bl,bt,result,round,opts){
+    const advancer = opts?.advancer || null;
+    const etResult = opts?.et_result || null;
     const y=yC-SH-GAP/2,h=SH*2+GAP;
     const g=document.createElementNS('http://www.w3.org/2000/svg','g');
     if(round) g.setAttribute('data-round',round);
@@ -177,19 +192,30 @@ function buildBracket(r32Data, rounds) {
       const parts=result.split('-');
       if(parts.length===2){ topScore=parts[0]; botScore=parts[1]; }
     }
-    [[tl,tt,yC-SH/2,topScore],[bl,bt,yC+SH/2,botScore]].forEach(([lbl,name,my,score])=>{
+    // Parse ET scores for display in brackets
+    let topET=null, botET=null;
+    if(etResult){
+      const parts=etResult.split('-');
+      if(parts.length===2){ topET=parts[0]; botET=parts[1]; }
+    }
+    [[tl,tt,yC-SH/2,topScore,topET],[bl,bt,yC+SH/2,botScore,botET]].forEach(([lbl,name,my,score,etScore])=>{
+      const isAdv = advancer && name === advancer;
+      const isElim = advancer && name && name !== advancer;
       const l=document.createElementNS('http://www.w3.org/2000/svg','text');
       Object.entries({x:x+8,y:my-6,fill:'#8a9aa0','font-size':8,'font-family':'Inter,sans-serif'}).forEach(([k,v])=>l.setAttribute(k,v));
       l.textContent=lbl; g.appendChild(l);
       const n=document.createElementNS('http://www.w3.org/2000/svg','text');
       const isTBD=!name;
       const flag = name ? (FLAG_MAP[name] || '') + ' ' : '';
-      Object.entries({x:x+8,y:my+8,fill:isTBD?'#8a9aa0':'#f5f7f2','font-size':isTBD?10:11,'font-weight':isTBD?400:600,'font-family':'Inter,sans-serif'}).forEach(([k,v])=>n.setAttribute(k,v));
+      const nameFill = isTBD ? '#8a9aa0' : isElim ? '#5a6a60' : '#f5f7f2';
+      Object.entries({x:x+8,y:my+8,fill:nameFill,'font-size':isTBD?10:11,'font-weight':isTBD?400:600,'font-family':'Inter,sans-serif'}).forEach(([k,v])=>n.setAttribute(k,v));
       n.textContent=isTBD?'—':flag+name; g.appendChild(n);
       if(score!==null){
+        const scoreFill = isElim ? '#5a6a60' : '#f0b429';
+        const scoreText = etScore ? score + ' (' + etScore + ')' : score;
         const s=document.createElementNS('http://www.w3.org/2000/svg','text');
-        Object.entries({x:x+CW-10,y:my+8,fill:'#f0b429','font-size':13,'font-weight':700,'font-family':'JetBrains Mono,monospace','text-anchor':'end'}).forEach(([k,v])=>s.setAttribute(k,v));
-        s.textContent=score; g.appendChild(s);
+        Object.entries({x:x+CW-10,y:my+8,fill:scoreFill,'font-size':etScore?11:13,'font-weight':700,'font-family':'JetBrains Mono,monospace','text-anchor':'end'}).forEach(([k,v])=>s.setAttribute(k,v));
+        s.textContent=scoreText; g.appendChild(s);
       }
     });
     svg.appendChild(g);
@@ -206,7 +232,7 @@ function buildBracket(r32Data, rounds) {
 
   // R32
   const r32c = r32Data.map((m,i) =>
-    drawMatch(CG, HDRH+matchH*i+matchH/2, m.topLabel, m.topTeam, m.botLabel, m.botTeam, m.result, 'R32')
+    drawMatch(CG, HDRH+matchH*i+matchH/2, m.topLabel, m.topTeam, m.botLabel, m.botTeam, m.result, 'R32', {advancer:m.advancer, et_result:m.et_result})
   );
 
   // R16
@@ -218,7 +244,7 @@ function buildBracket(r32Data, rounds) {
     const tl = g?.home_slot||('W M'+(i*2+1)), bl = g?.away_slot||('W M'+(i*2+2));
     const tt = g ? teamOrNull(g.home, g.home_slot) : null;
     const bt = g ? teamOrNull(g.away, g.away_slot) : null;
-    drawMatch(r16x,yC,tl,tt,bl,bt,g?.result||null,'R16');
+    drawMatch(r16x,yC,tl,tt,bl,bt,g?.result||null,'R16',{advancer:g?getAdvancer(g):null,et_result:g?.et_result||null});
     conn(t.rightX,t.topY,t.centerY,r16x,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,r16x,yC+SH/2+8);
     r16c.push({rightX:r16x+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
@@ -232,7 +258,7 @@ function buildBracket(r32Data, rounds) {
     const tl = g?.home_slot||('W R16-'+(i*2+1)), bl = g?.away_slot||('W R16-'+(i*2+2));
     const tt = g ? teamOrNull(g.home, g.home_slot) : null;
     const bt = g ? teamOrNull(g.away, g.away_slot) : null;
-    drawMatch(qfx,yC,tl,tt,bl,bt,g?.result||null,'QF');
+    drawMatch(qfx,yC,tl,tt,bl,bt,g?.result||null,'QF',{advancer:g?getAdvancer(g):null,et_result:g?.et_result||null});
     conn(t.rightX,t.topY,t.centerY,qfx,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,qfx,yC+SH/2+8);
     qfc.push({rightX:qfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
@@ -246,7 +272,7 @@ function buildBracket(r32Data, rounds) {
     const tl = g?.home_slot||('W QF-'+(i*2+1)), bl = g?.away_slot||('W QF-'+(i*2+2));
     const tt = g ? teamOrNull(g.home, g.home_slot) : null;
     const bt = g ? teamOrNull(g.away, g.away_slot) : null;
-    drawMatch(sfx,yC,tl,tt,bl,bt,g?.result||null,'SF');
+    drawMatch(sfx,yC,tl,tt,bl,bt,g?.result||null,'SF',{advancer:g?getAdvancer(g):null,et_result:g?.et_result||null});
     conn(t.rightX,t.topY,t.centerY,sfx,yC-SH/2+8);
     conn(b.rightX,b.centerY,b.botY,sfx,yC+SH/2+8);
     sfc.push({rightX:sfx+CW,centerY:yC,topY:yC-SH/2+8,botY:yC+SH/2+8});
@@ -255,7 +281,7 @@ function buildBracket(r32Data, rounds) {
   // Final
   const finx=sfx+CW+CG, finY=(sfc[0].centerY+sfc[1].centerY)/2;
   const fg = rounds.F[0];
-  drawMatch(finx,finY,fg?.home_slot||'W SF-1',fg?teamOrNull(fg.home,fg.home_slot):null,fg?.away_slot||'W SF-2',fg?teamOrNull(fg.away,fg.away_slot):null,fg?.result||null,'F');
+  drawMatch(finx,finY,fg?.home_slot||'W SF-1',fg?teamOrNull(fg.home,fg.home_slot):null,fg?.away_slot||'W SF-2',fg?teamOrNull(fg.away,fg.away_slot):null,fg?.result||null,'F',{advancer:fg?getAdvancer(fg):null,et_result:fg?.et_result||null});
   conn(sfc[0].rightX,sfc[0].topY,sfc[0].centerY,finx,finY-SH/2+8);
   conn(sfc[1].rightX,sfc[1].centerY,sfc[1].botY,finx,finY+SH/2+8);
 
@@ -269,7 +295,7 @@ function buildBracket(r32Data, rounds) {
   // 3rd place match
   const thirdY=finY+SH*2+GAP*4;
   const tg = rounds['3rd']?.[0];
-  drawMatch(finx,thirdY,tg?.home_slot||'L SF-1',tg?teamOrNull(tg.home,tg.home_slot):null,tg?.away_slot||'L SF-2',tg?teamOrNull(tg.away,tg.away_slot):null,tg?.result||null,'F');
+  drawMatch(finx,thirdY,tg?.home_slot||'L SF-1',tg?teamOrNull(tg.home,tg.home_slot):null,tg?.away_slot||'L SF-2',tg?teamOrNull(tg.away,tg.away_slot):null,tg?.result||null,'F',{advancer:tg?getAdvancer(tg):null,et_result:tg?.et_result||null});
   addTxt(finx+CW/2,thirdY-SH-GAP-6,'3RD PLACE · 18 Jul','#c07840',10);
 
   svg.setAttribute('height',Math.max(thirdY+SH+GAP+20,svgH));
@@ -285,13 +311,14 @@ function getMatchesForRound(filter) {
   const ROUND_NAMES = { R32:'Round of 32', R16:'Round of 16', QF:'Quarter-finals', SF:'Semi-finals / Final' };
   if (filter === 'R32') {
     return d.r32.map(m => ({
-      topLabel:m.topLabel, topTeam:m.topTeam, botLabel:m.botLabel, botTeam:m.botTeam, result:m.result, roundName:ROUND_NAMES.R32
+      topLabel:m.topLabel, topTeam:m.topTeam, botLabel:m.botLabel, botTeam:m.botTeam,
+      result:m.result, roundName:ROUND_NAMES.R32, advancer:m.advancer, et_result:m.et_result
     }));
   }
   const extract = (arr, rnd) => (arr||[]).filter(Boolean).map(g => ({
     topLabel:g.home_slot, topTeam:teamOrNull(g.home,g.home_slot),
     botLabel:g.away_slot, botTeam:teamOrNull(g.away,g.away_slot),
-    result:g.result||null, roundName:rnd
+    result:g.result||null, roundName:rnd, advancer:getAdvancer(g), et_result:g.et_result||null
   }));
   if (filter === 'R16') return extract(d.rounds.R16, ROUND_NAMES.R16);
   if (filter === 'QF') return extract(d.rounds.QF, ROUND_NAMES.QF);
@@ -313,19 +340,25 @@ function renderCompact(matches) {
   matches.forEach(m => {
     const card = document.createElement('div');
     card.className = 'compact-card';
-    const row = (label, team, score) => {
+    let topET=null, botET=null;
+    if (m.et_result) { const p=m.et_result.split('-'); if(p.length===2){topET=p[0];botET=p[1];} }
+    const row = (label, team, score, etScore) => {
       const flag = team ? (FLAG_MAP[team]||'') + ' ' : '';
+      const isAdv = m.advancer && team === m.advancer;
+      const isElim = m.advancer && team && team !== m.advancer;
+      const teamCls = team ? (isElim ? ' cc-elim' : '') : ' tbd';
+      const scoreText = score !== null ? (etScore ? `${score} (${etScore})` : score) : '';
       return `<div class="cc-row">
         <span class="cc-slot">${label}</span>
-        <span class="cc-team${team?'':' tbd'}">${team ? flag+team : '—'}</span>
-        ${score!==null ? `<span class="cc-score">${score}</span>` : ''}
+        <span class="cc-team${teamCls}">${team ? flag+team : '—'}</span>
+        ${scoreText ? `<span class="cc-score${isElim?' cc-elim':''}">${scoreText}</span>` : ''}
       </div>`;
     };
     let topScore=null, botScore=null;
     if (m.result) { const p=m.result.split('-'); if(p.length===2){topScore=p[0];botScore=p[1];} }
     card.innerHTML = `<div class="cc-header">${m.roundName||''}</div>`
-      + row(m.topLabel, m.topTeam, topScore)
-      + row(m.botLabel, m.botTeam, botScore);
+      + row(m.topLabel, m.topTeam, topScore, topET)
+      + row(m.botLabel, m.botTeam, botScore, botET);
     grid.appendChild(card);
   });
   wrap.appendChild(grid);

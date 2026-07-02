@@ -550,10 +550,20 @@ Deno.serve(async (req) => {
                 } else {
                   result = `${regResult.awayScore}-${regResult.homeScore}`
                 }
-                // Set advancer if game went to ET/pens
+                // Set advancer + ET score if game went to ET/pens
                 if (regResult.advancer && !pg.advancer) {
                   updates.advancer = regResult.advancer
                   l(`  Game ${pg.id} draw after 90' — advancer: ${regResult.advancer}`)
+                }
+                // Store full-time score (incl. ET) when different from regulation
+                const wcFullScore = `${match.home_score}-${match.away_score}`
+                if (wcFullScore !== result) {
+                  // Orient ET score same as our home/away
+                  if (regResult.home === pg.home) {
+                    updates.et_result = wcFullScore
+                  } else {
+                    updates.et_result = `${match.away_score}-${match.home_score}`
+                  }
                 }
               } else if (!pg.advancer) {
                 // Fallback: detect advancer from ESPN winner flag
