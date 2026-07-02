@@ -172,8 +172,13 @@ async function espnRegulationResult(eventId: string): Promise<{
   const awayLinescores = awayComp.linescores || []
   if (homeLinescores.length < 2 || awayLinescores.length < 2) return null
 
-  const homeScore = Number(homeLinescores[0]?.value ?? 0) + Number(homeLinescores[1]?.value ?? 0)
-  const awayScore = Number(awayLinescores[0]?.value ?? 0) + Number(awayLinescores[1]?.value ?? 0)
+  // ESPN uses displayValue (string) not value — parse both for safety
+  const lsVal = (ls: any) => Number(ls?.value ?? ls?.displayValue ?? 0)
+  // Sanity check: if linescores exist but have no actual values, bail out
+  const hasValues = homeLinescores.some((ls: any) => ls?.value != null || ls?.displayValue != null)
+  if (!hasValues) return null
+  const homeScore = lsVal(homeLinescores[0]) + lsVal(homeLinescores[1])
+  const awayScore = lsVal(awayLinescores[0]) + lsVal(awayLinescores[1])
 
   // If there are more than 2 periods, the game went to ET/pens — find winner
   let advancer: string | null = null
@@ -188,13 +193,13 @@ async function espnRegulationResult(eventId: string): Promise<{
     const etPeriods = homeLinescores.length > 4 ? homeLinescores.length - 1 : homeLinescores.length
     let homeET = 0, awayET = 0
     for (let i = 0; i < etPeriods; i++) {
-      homeET += Number(homeLinescores[i]?.value ?? 0)
-      awayET += Number(awayLinescores[i]?.value ?? 0)
+      homeET += lsVal(homeLinescores[i])
+      awayET += lsVal(awayLinescores[i])
     }
     // If still tied after ET periods and there's an extra period, it's penalties
     if (homeET === awayET && homeLinescores.length > etPeriods) {
-      penHome = Number(homeLinescores[homeLinescores.length - 1]?.value ?? 0)
-      penAway = Number(awayLinescores[awayLinescores.length - 1]?.value ?? 0)
+      penHome = lsVal(homeLinescores[homeLinescores.length - 1])
+      penAway = lsVal(awayLinescores[awayLinescores.length - 1])
     }
   }
 
