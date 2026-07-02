@@ -551,6 +551,10 @@ Deno.serve(async (req) => {
         let result = `${match.home_score}-${match.away_score}`
         const updates: Record<string, any> = {}
 
+        // Skip knockout games that already have a result + advancer —
+        // worldcup26.ir includes ET goals which would overwrite the correct 90-min score
+        if (isKO && pg.result && pg.advancer) continue
+
         // For knockout games, use ESPN regulation-time (90 min) score
         // worldcup26.ir includes extra time goals which we don't want
         if (isKO) {
