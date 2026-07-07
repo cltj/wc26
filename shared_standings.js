@@ -94,28 +94,26 @@ function qualifyingThirdGroups(groups) {
   return qualifying;
 }
 
-// FIFA 2026 R32 bracket structure (ordered for proper R16 pairings)
-// Adjacent matches feed into the same R16 match:
-// M74+M77→R16, M73+M75→R16, M76+M78→R16, M79+M80→R16,
-// M83+M84→R16, M81+M82→R16, M86+M88→R16, M85+M87→R16
-// Slots per FIFA official bracket (post-group stage determination)
+// FIFA 2026 R32 bracket structure (ordered for bracket tree)
+// Pairs [0-3]→QF41, [4-7]→QF42, [8-11]→QF43, [12-15]→QF44
+// QF41+QF42→SF45, QF43+QF44→SF46
 const R32_STRUCTURE = [
   { top: '1st E', bot: '3rd A/B/C/D/F', date: '29 Jun' },   // M74: Germany vs Paraguay
   { top: '1st I', bot: '3rd C/D/F/G/H', date: '30 Jun' },   // M77: France vs Sweden
   { top: '2nd A', bot: '2nd B', date: '28 Jun' },           // M73: South Africa vs Canada
   { top: '1st F', bot: '2nd C', date: '29 Jun' },           // M75: Netherlands vs Morocco
-  { top: '1st C', bot: '2nd F', date: '29 Jun' },           // M76: Brazil vs Japan
-  { top: '2nd E', bot: '2nd I', date: '30 Jun' },           // M78: Ivory Coast vs Norway
-  { top: '1st A', bot: '3rd C/E', date: '30 Jun' },         // M79: Mexico vs 3rd C/E
-  { top: '1st L', bot: '3rd I/J/K', date: '1 Jul' },        // M80: England vs 3rd I/J/K
-  { top: '2nd K', bot: '2nd L', date: '2 Jul' },            // M83: Colombia vs Ghana
+  { top: '2nd K', bot: '2nd L', date: '2 Jul' },            // M83: Portugal vs Croatia
   { top: '1st H', bot: '2nd J', date: '2 Jul' },            // M84: Spain vs Austria
   { top: '1st D', bot: '3rd B/E/F/I/J', date: '1 Jul' },    // M81: USA vs Bosnia
-  { top: '1st G', bot: '3rd A/I/J', date: '1 Jul' },        // M82: Belgium vs 3rd A/I/J
+  { top: '1st G', bot: '3rd A/I/J', date: '1 Jul' },        // M82: Belgium vs Senegal
+  { top: '1st C', bot: '2nd F', date: '29 Jun' },           // M76: Brazil vs Japan
+  { top: '2nd E', bot: '2nd I', date: '30 Jun' },           // M78: Ivory Coast vs Norway
+  { top: '1st A', bot: '3rd C/E', date: '30 Jun' },         // M79: Mexico vs Ecuador
+  { top: '1st L', bot: '3rd I/J/K', date: '1 Jul' },        // M80: England vs DR Congo
   { top: '1st J', bot: '2nd H', date: '3 Jul' },            // M86: Argentina vs Cape Verde
   { top: '2nd D', bot: '2nd G', date: '3 Jul' },            // M88: Australia vs Egypt
-  { top: '1st B', bot: '3rd G/J', date: '2 Jul' },          // M85: Switzerland vs 3rd G/J
-  { top: '1st K', bot: '3rd E/I/L', date: '3 Jul' },        // M87: Portugal vs 3rd E/I/L
+  { top: '1st B', bot: '3rd G/J', date: '2 Jul' },          // M85: Switzerland vs Algeria
+  { top: '1st K', bot: '3rd E/I/L', date: '3 Jul' },        // M87: Colombia vs Ghana
 ];
 
 // Resolve a bracket slot label to a team name
