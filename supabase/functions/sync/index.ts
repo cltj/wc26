@@ -117,8 +117,10 @@ function matchPlayer(
   return null
 }
 
-// Fetch ESPN scoreboard for a date, return array of {id, home, away, status}
-async function espnScoreboard(dateStr: string): Promise<Array<{id: string, home: string, away: string}>> {
+// Fetch ESPN scoreboard for a date, return array of finished games with scores
+async function espnScoreboard(dateStr: string): Promise<Array<{
+  id: string, home: string, away: string, homeScore: number, awayScore: number
+}>> {
   const res = await fetch(`${ESPN_API}/scoreboard?dates=${dateStr}`)
   if (!res.ok) return []
   const data = await res.json()
@@ -127,9 +129,15 @@ async function espnScoreboard(dateStr: string): Promise<Array<{id: string, home:
     .map((e: any) => {
       const comps = e.competitions?.[0] || {}
       const teams = comps.competitors || []
-      const home = teams.find((t: any) => t.homeAway === 'home')?.team?.displayName || ''
-      const away = teams.find((t: any) => t.homeAway === 'away')?.team?.displayName || ''
-      return { id: e.id, home: mapEspnTeam(home), away: mapEspnTeam(away) }
+      const homeComp = teams.find((t: any) => t.homeAway === 'home')
+      const awayComp = teams.find((t: any) => t.homeAway === 'away')
+      return {
+        id: e.id,
+        home: mapEspnTeam(homeComp?.team?.displayName || ''),
+        away: mapEspnTeam(awayComp?.team?.displayName || ''),
+        homeScore: Number(homeComp?.score ?? 0),
+        awayScore: Number(awayComp?.score ?? 0),
+      }
     })
 }
 
@@ -535,93 +543,84 @@ Deno.serve(async (req) => {
     logData.schedule_updates = schedUpdates
     l(`✓ ${schedUpdates} schedule rows updated`)
 
-    // ── Step 3: Update games table (prediction league) ──────────────────
-    const { data: predGames } = await supabase.from('games').select('id,home,away,result,round,advancer')
+    // ── Step 3: Update games table via ESPN API ──────────────────────────
+    const { data: predGames } = await supabase.from('games').select('id,home,away,result,round,advancer,kickoff')
     let gameUpdates = 0
     if (predGames) {
-      for (const pg of predGames) {
-        const match = finished.find((g: any) => {
-          const h = mapWcTeam(g.home_team_name_en)
-          const a = mapWcTeam(g.away_team_name_en)
-          return (h === pg.home || h === mapWcTeam(pg.home)) && (a === pg.away || a === mapWcTeam(pg.away))
-        })
-        if (!match) continue
+      // Group games by date for efficient ESPN lookups (one scoreboard call per date)
+      const espnCache: Record<string, Awaited<ReturnType<typeof espnScoreboard>>> = {}
+      const getScoreboard = async (date: string) => {
+        if (!espnCache[date]) espnCache[date] = await espnScoreboard(date)
+        return espnCache[date]
+      }
 
+      for (const pg of predGames) {
+        // Skip games that already have a result + advancer (fully resolved)
         const isKO = pg.round && pg.round !== 'group'
-        let result = `${match.home_score}-${match.away_score}`
+        if (isKO && pg.result && pg.advancer) continue
+        if (!isKO && pg.result) continue
+        // Skip games without resolved teams
+        if (!pg.home || !pg.away || pg.home.startsWith('W') || pg.home.startsWith('L')) continue
+
+        // Look up game on ESPN scoreboard by kickoff date
+        const kickoff = new Date(pg.kickoff)
+        const espnDate = kickoff.toISOString().slice(0, 10).replace(/-/g, '')
+        const events = await getScoreboard(espnDate)
+        const ev = events.find(e =>
+          (e.home === pg.home && e.away === pg.away) ||
+          (e.away === pg.home && e.home === pg.away)
+        )
+        if (!ev) continue
+
         const updates: Record<string, any> = {}
 
-        // Skip knockout games that already have a result + advancer —
-        // worldcup26.ir includes ET goals which would overwrite the correct 90-min score
-        if (isKO && pg.result && pg.advancer) continue
-
-        // For knockout games, use ESPN regulation-time (90 min) score
-        // worldcup26.ir includes extra time goals which we don't want
         if (isKO) {
-          const dateStr = match.local_date || ''
-          const dm = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/)
-          if (dm) {
-            const espnDate = `${dm[3]}${dm[1]}${dm[2]}`
-            const events = await espnScoreboard(espnDate)
-            const ev = events.find(e =>
-              (e.home === pg.home && e.away === pg.away) ||
-              (e.away === pg.home && e.home === pg.away)
-            )
-            if (ev) {
-              const regResult = await espnRegulationResult(ev.id)
-              if (regResult) {
-                // Use regulation score — determine home/away orientation
-                if (regResult.home === pg.home) {
-                  result = `${regResult.homeScore}-${regResult.awayScore}`
-                } else {
-                  result = `${regResult.awayScore}-${regResult.homeScore}`
-                }
-                // Set advancer + ET score if game went to ET/pens
-                if (regResult.advancer && !pg.advancer) {
-                  updates.advancer = regResult.advancer
-                  l(`  Game ${pg.id} draw after 90' — advancer: ${regResult.advancer}`)
-                }
-                // Store penalty result if detected
-                if (regResult.penHome !== null && regResult.penAway !== null) {
-                  if (regResult.home === pg.home) {
-                    updates.pen_result = `${regResult.penHome}-${regResult.penAway}`
-                  } else {
-                    updates.pen_result = `${regResult.penAway}-${regResult.penHome}`
-                  }
-                  l(`  Game ${pg.id} penalties: ${updates.pen_result}`)
-                } else {
-                  // Store full-time score (incl. ET) when different from regulation
-                  const wcFullScore = `${match.home_score}-${match.away_score}`
-                  if (wcFullScore !== result) {
-                    if (regResult.home === pg.home) {
-                      updates.et_result = wcFullScore
-                    } else {
-                      updates.et_result = `${match.away_score}-${match.home_score}`
-                    }
-                  }
-                }
-              } else if (!pg.advancer) {
-                // Fallback: detect advancer from ESPN winner flag
-                const [hs, as] = [parseInt(match.home_score), parseInt(match.away_score)]
-                if (hs === as) {
-                  const winner = await espnMatchWinner(ev.id)
-                  if (winner) {
-                    updates.advancer = winner
-                    l(`  Game ${pg.id} draw — advancer: ${winner}`)
-                  }
-                }
-              }
+          // Knockout: use ESPN regulation-time (90 min) score
+          const regResult = await espnRegulationResult(ev.id)
+          if (!regResult) continue
+          const homeFirst = regResult.home === pg.home
+          const result = homeFirst
+            ? `${regResult.homeScore}-${regResult.awayScore}`
+            : `${regResult.awayScore}-${regResult.homeScore}`
+
+          if (result !== pg.result) updates.result = result
+
+          // Set advancer: from ESPN for draws (ET/pens), or from score for non-draws
+          if (!pg.advancer) {
+            if (regResult.advancer) {
+              updates.advancer = regResult.advancer
+              l(`  Game ${pg.id} draw after 90' — advancer: ${regResult.advancer}`)
+            } else if (regResult.homeScore !== regResult.awayScore) {
+              updates.advancer = regResult.homeScore > regResult.awayScore ? regResult.home : regResult.away
             }
           }
+          if (regResult.penHome !== null && regResult.penAway !== null) {
+            updates.pen_result = homeFirst
+              ? `${regResult.penHome}-${regResult.penAway}`
+              : `${regResult.penAway}-${regResult.penHome}`
+            l(`  Game ${pg.id} penalties: ${updates.pen_result}`)
+          }
+          // Store ET score if game went to extra time (total score differs from regulation)
+          const totalScore = homeFirst
+            ? `${ev.homeScore}-${ev.awayScore}`
+            : `${ev.awayScore}-${ev.homeScore}`
+          if (regResult.advancer && totalScore !== (updates.result || pg.result)) {
+            updates.et_result = totalScore
+          }
+        } else {
+          // Group stage: ESPN total score is the final result
+          const homeFirst = ev.home === pg.home
+          const result = homeFirst
+            ? `${ev.homeScore}-${ev.awayScore}`
+            : `${ev.awayScore}-${ev.homeScore}`
+          if (result !== pg.result) updates.result = result
         }
-
-        if (result !== pg.result) updates.result = result
 
         if (Object.keys(updates).length > 0) {
           await supabase.from('games').update(updates).eq('id', pg.id)
           gameUpdates++
-          logData.games_processed.push({ home: pg.home, away: pg.away, result })
-          l(`  Game ${pg.id} ${pg.home} vs ${pg.away}: ${pg.result || 'null'} → ${result}`)
+          logData.games_processed.push({ home: pg.home, away: pg.away, result: updates.result || pg.result })
+          l(`  Game ${pg.id} ${pg.home} vs ${pg.away}: ${pg.result || 'null'} → ${updates.result || pg.result}`)
         }
       }
     }
