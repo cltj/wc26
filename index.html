@@ -391,7 +391,8 @@ function renderPredGame(g) {
   const teamsKnown = homeKnown && awayKnown;
   // isSlot = knockout game with at least one undetermined team (predictions locked)
   const isSlot = ko && !teamsKnown;
-  const roundLocked = ko && g.round && roundLocks[g.round] !== 'open';
+  const lockRound = g.round === '3rd' ? 'F' : g.round;
+  const roundLocked = ko && lockRound && roundLocks[lockRound] !== 'open';
   const locked = new Date() >= new Date(g.kickoff) || isSlot || roundLocked;
   const norway = [g.home,g.away].some(t => t.toLowerCase()==='norway' || t.toLowerCase()==='iraq');
   const kickoff = new Date(g.kickoff);
