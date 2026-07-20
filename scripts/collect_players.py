@@ -3,6 +3,7 @@
 ESPN Player Collection Pipeline
 
 Fetches club rosters from ESPN and upserts players into Supabase.
+Detects transfers (club changes), new players, and departures.
 Designed to run incrementally — only re-fetches clubs older than FRESHNESS_HOURS.
 
 Usage:
@@ -10,12 +11,11 @@ Usage:
   python3 scripts/collect_players.py --league eng.1   # only Premier League
   python3 scripts/collect_players.py --limit 10       # max 10 clubs per run
   python3 scripts/collect_players.py --freshness 168  # re-fetch if older than 7 days
-  python3 scripts/collect_players.py --all             # ignore freshness, fetch everything
+  python3 scripts/collect_players.py --all            # ignore freshness, fetch everything
 """
 
 import argparse
 import json
-import math
 import sys
 import time
 import urllib.request
@@ -79,6 +79,18 @@ def sb_upsert(table, data, on_conflict=None):
     resp = urllib.request.urlopen(req)
     return json.loads(resp.read())
 
+def sb_post(table, data):
+    url = f'{SB_URL}/rest/v1/{table}'
+    headers = {
+        'apikey': SB_KEY,
+        'Authorization': f'Bearer {SB_KEY}',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
+    }
+    req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=headers, method='POST')
+    resp = urllib.request.urlopen(req)
+    return json.loads(resp.read())
+
 def sb_patch(table, filters, data):
     url = f'{SB_URL}/rest/v1/{table}?{filters}'
     headers = {
@@ -100,27 +112,23 @@ def espn_fetch(url):
         return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         if e.code == 429:
-            print(f'  ⚠ Rate limited, waiting 60s...')
+            print(f'  Rate limited, waiting 60s...')
             time.sleep(60)
             resp = urllib.request.urlopen(req)
             return json.loads(resp.read())
         raise
 
 def inches_to_cm(inches):
-    if not inches:
-        return None
-    return round(inches * 2.54)
+    return round(inches * 2.54) if inches else None
 
 def lbs_to_kg(lbs):
-    if not lbs:
-        return None
-    return round(lbs * 0.453592)
+    return round(lbs * 0.453592) if lbs else None
 
 def parse_dob(dob_str):
     if not dob_str:
         return None
     try:
-        return dob_str[:10]  # "1999-12-10T08:00Z" → "1999-12-10"
+        return dob_str[:10]
     except Exception:
         return None
 
@@ -134,10 +142,32 @@ def position_abbr(pos_obj):
 
 def collect(args):
     print('Loading reference data...')
+    now = datetime.now(timezone.utc)
 
     # Load national teams for nationality mapping
     nat_teams = sb_get('national_teams?select=id,name&order=name')
     nat_by_name = {t['name']: t['id'] for t in nat_teams}
+
+    # Load current seasons for transfer context
+    seasons = sb_get('seasons?select=id,league_id,label&is_current=eq.true')
+    season_by_league = {s['league_id']: s['id'] for s in seasons}
+
+    # Load leagues for league_id lookup
+    leagues = sb_get('leagues?select=id,espn_code')
+    league_id_by_code = {l['espn_code']: l['id'] for l in leagues}
+
+    # Load existing players by espn_id for transfer detection
+    print('Loading existing player index...')
+    existing_players = {}
+    offset = 0
+    while True:
+        batch = sb_get(f'players?select=id,espn_id,current_club_id&espn_id=not.is.null&order=id&offset={offset}&limit=1000')
+        for p in batch:
+            existing_players[str(p['espn_id'])] = p
+        if len(batch) < 1000:
+            break
+        offset += 1000
+    print(f'  {len(existing_players)} existing players indexed')
 
     # Load club teams to process
     club_filter = 'club_teams?select=id,espn_team_id,name,league_espn_code,roster_updated_at&order=roster_updated_at.nullsfirst,name'
@@ -146,7 +176,6 @@ def collect(args):
     clubs = sb_get(club_filter)
 
     # Filter by freshness
-    now = datetime.now(timezone.utc)
     if not args.all:
         def is_stale(club):
             if not club.get('roster_updated_at'):
@@ -161,11 +190,15 @@ def collect(args):
 
     print(f'Processing {len(clubs)} clubs (freshness: {args.freshness}h)')
 
-    stats = {'clubs': 0, 'players_upserted': 0, 'errors': 0, 'skipped': 0}
+    stats = {'clubs': 0, 'players_upserted': 0, 'transfers': 0, 'new_players': 0, 'errors': 0, 'skipped': 0}
+
+    # Track which espn_ids we see on each club's current roster
+    seen_on_roster = {}  # club_id → set of espn_id strings
 
     for i, club in enumerate(clubs):
         espn_id = club['espn_team_id']
         league = club['league_espn_code']
+        club_id = club['id']
 
         print(f'[{i+1}/{len(clubs)}] {club["name"]} ({league}, espn:{espn_id})...', end=' ', flush=True)
 
@@ -177,17 +210,24 @@ def collect(args):
             if not athletes:
                 print(f'0 players (empty roster)')
                 stats['skipped'] += 1
-                # Still mark as fetched so we don't retry immediately
-                sb_patch('club_teams', f'id=eq.{club["id"]}', {'roster_updated_at': now.isoformat()})
+                sb_patch('club_teams', f'id=eq.{club_id}', {'roster_updated_at': now.isoformat()})
                 time.sleep(REQUEST_DELAY)
                 continue
 
-            # Build player records
             player_rows = []
+            roster_espn_ids = set()
+            transfer_records = []
+
+            league_id = league_id_by_code.get(league.upper())
+            season_id = season_by_league.get(league_id) if league_id else None
+
             for a in athletes:
                 espn_player_id = int(a.get('id', 0))
                 if not espn_player_id:
                     continue
+
+                espn_id_str = str(espn_player_id)
+                roster_espn_ids.add(espn_id_str)
 
                 # Map nationality
                 citizenship = a.get('citizenship', '')
@@ -195,7 +235,6 @@ def collect(args):
                 nationality_id = nat_by_name.get(mapped_name)
 
                 if not nationality_id and citizenship:
-                    # Try fuzzy: check if citizenship is a substring of any team name
                     for tname, tid in nat_by_name.items():
                         if citizenship.lower() in tname.lower() or tname.lower() in citizenship.lower():
                             nationality_id = tid
@@ -212,25 +251,63 @@ def collect(args):
                     'primary_position': position_abbr(a.get('position')),
                     'height_cm': inches_to_cm(a.get('height')),
                     'weight_kg': lbs_to_kg(a.get('weight')),
-                    'current_club_id': club['id'],
+                    'current_club_id': club_id,
                     'image_url': ESPN_HEADSHOT.format(espn_id=espn_player_id),
                     'updated_at': now.isoformat(),
                 }
-
                 player_rows.append(row)
 
+                # Detect transfers: player existed before with a different club
+                prev = existing_players.get(espn_id_str)
+                if prev:
+                    old_club = prev.get('current_club_id')
+                    if old_club and old_club != club_id:
+                        transfer_records.append({
+                            'player_id': prev['id'],
+                            'from_club_id': old_club,
+                            'to_club_id': club_id,
+                            'detected_at': now.isoformat(),
+                            'season_id': season_id,
+                            'type': 'transfer',
+                            'notes': row['name'],
+                        })
+                        stats['transfers'] += 1
+                else:
+                    # New player we haven't seen before
+                    stats['new_players'] += 1
+
             if player_rows:
-                sb_upsert('players', player_rows, on_conflict='espn_id')
+                result = sb_upsert('players', player_rows, on_conflict='espn_id')
                 stats['players_upserted'] += len(player_rows)
 
-            # Mark club as fetched
-            sb_patch('club_teams', f'id=eq.{club["id"]}', {'roster_updated_at': now.isoformat()})
+                # Update existing_players index with new data
+                for r in result:
+                    existing_players[str(r['espn_id'])] = {
+                        'id': r['id'],
+                        'espn_id': r['espn_id'],
+                        'current_club_id': r['current_club_id'],
+                    }
+
+            # Log transfers
+            if transfer_records:
+                try:
+                    sb_post('transfers', transfer_records)
+                    print(f'{len(player_rows)} players, {len(transfer_records)} transfers', end='')
+                except Exception as e:
+                    print(f' (transfer log error: {e})', end='')
+
+            seen_on_roster[club_id] = roster_espn_ids
+
+            sb_patch('club_teams', f'id=eq.{club_id}', {'roster_updated_at': now.isoformat()})
             stats['clubs'] += 1
-            print(f'{len(player_rows)} players')
+            if not transfer_records:
+                print(f'{len(player_rows)} players')
+            else:
+                print()
 
         except urllib.error.HTTPError as e:
             body = e.read().decode()[:200] if hasattr(e, 'read') else ''
-            print(f'ERROR: {e} — {body}')
+            print(f'ERROR: {e} -- {body}')
             stats['errors'] += 1
         except Exception as e:
             print(f'ERROR: {e}')
@@ -238,7 +315,41 @@ def collect(args):
 
         time.sleep(REQUEST_DELAY)
 
-    print(f'\nDone: {stats["clubs"]} clubs, {stats["players_upserted"]} players upserted, {stats["errors"]} errors, {stats["skipped"]} empty rosters')
+    # Detect departures: players whose current_club_id is a club we just fetched,
+    # but who are no longer on that club's roster
+    if seen_on_roster and not args.league:
+        print('\nChecking for departures...')
+        departed = 0
+        for club_id, roster_ids in seen_on_roster.items():
+            for espn_id_str, player in existing_players.items():
+                if player.get('current_club_id') == club_id and espn_id_str not in roster_ids:
+                    # Player was at this club but no longer on roster
+                    league_id = None
+                    for c in clubs:
+                        if c['id'] == club_id:
+                            league_id = league_id_by_code.get(c['league_espn_code'].upper())
+                            break
+                    season_id = season_by_league.get(league_id) if league_id else None
+                    try:
+                        sb_post('transfers', [{
+                            'player_id': player['id'],
+                            'from_club_id': club_id,
+                            'to_club_id': None,
+                            'detected_at': now.isoformat(),
+                            'season_id': season_id,
+                            'type': 'unknown',
+                            'notes': f'No longer on roster (espn_id: {espn_id_str})',
+                        }])
+                        departed += 1
+                    except Exception:
+                        pass
+        if departed:
+            print(f'  {departed} players departed from fetched clubs')
+            stats['transfers'] += departed
+
+    print(f'\nDone: {stats["clubs"]} clubs, {stats["players_upserted"]} players, '
+          f'{stats["new_players"]} new, {stats["transfers"]} transfers, '
+          f'{stats["errors"]} errors, {stats["skipped"]} empty rosters')
     return stats
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
