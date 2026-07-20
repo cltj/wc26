@@ -4,14 +4,15 @@ ESPN Player Collection Pipeline
 
 Fetches club rosters from ESPN and upserts players into Supabase.
 Detects transfers (club changes), new players, and departures.
-Designed to run incrementally — only re-fetches clubs older than FRESHNESS_HOURS.
+Supports season-aware fetching for historical data.
 
 Usage:
-  python3 scripts/collect_players.py                  # fetch stale clubs (default: 24h)
+  python3 scripts/collect_players.py                  # fetch stale clubs, current season
   python3 scripts/collect_players.py --league eng.1   # only Premier League
   python3 scripts/collect_players.py --limit 10       # max 10 clubs per run
   python3 scripts/collect_players.py --freshness 168  # re-fetch if older than 7 days
   python3 scripts/collect_players.py --all            # ignore freshness, fetch everything
+  python3 scripts/collect_players.py --season 2023    # fetch 2023(-24) rosters for all leagues
 """
 
 import argparse
@@ -30,9 +31,8 @@ SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6I
 
 ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer'
 ESPN_HEADSHOT = 'https://a.espncdn.com/i/headshots/soccer/players/full/{espn_id}.png'
-REQUEST_DELAY = 1.0  # seconds between ESPN API calls
+REQUEST_DELAY = 1.0
 
-# ESPN citizenship name → our national_teams.name
 NATIONALITY_MAP = {
     'United States': 'USA',
     'Ivory Coast': "Côte d'Ivoire",
@@ -144,19 +144,27 @@ def collect(args):
     print('Loading reference data...')
     now = datetime.now(timezone.utc)
 
-    # Load national teams for nationality mapping
     nat_teams = sb_get('national_teams?select=id,name&order=name')
     nat_by_name = {t['name']: t['id'] for t in nat_teams}
 
-    # Load current seasons for transfer context
-    seasons = sb_get('seasons?select=id,league_id,label&is_current=eq.true')
-    season_by_league = {s['league_id']: s['id'] for s in seasons}
+    # Load seasons — if --season given, find matching seasons; otherwise use current
+    all_seasons = sb_get('seasons?select=id,league_id,label,start_date')
+    season_by_league = {}
+    if args.season:
+        # Match seasons whose start_date year equals the requested year
+        for s in all_seasons:
+            if s.get('start_date') and s['start_date'][:4] == str(args.season):
+                season_by_league[s['league_id']] = s
+    else:
+        current = sb_get('seasons?select=id,league_id,label,start_date&is_current=eq.true')
+        for s in current:
+            season_by_league[s['league_id']] = s
 
-    # Load leagues for league_id lookup
     leagues = sb_get('leagues?select=id,espn_code')
     league_id_by_code = {l['espn_code']: l['id'] for l in leagues}
+    league_code_by_id = {l['id']: l['espn_code'] for l in leagues}
 
-    # Load existing players by espn_id for transfer detection
+    # Load existing players for transfer detection
     print('Loading existing player index...')
     existing_players = {}
     offset = 0
@@ -169,14 +177,14 @@ def collect(args):
         offset += 1000
     print(f'  {len(existing_players)} existing players indexed')
 
-    # Load club teams to process
+    # Load clubs
     club_filter = 'club_teams?select=id,espn_team_id,name,league_espn_code,roster_updated_at&order=roster_updated_at.nullsfirst,name'
     if args.league:
         club_filter += f'&league_espn_code=eq.{urllib.parse.quote(args.league.upper())}'
     clubs = sb_get(club_filter)
 
-    # Filter by freshness
-    if not args.all:
+    # Filter by freshness (skip for historical season fetches)
+    if not args.all and not args.season:
         def is_stale(club):
             if not club.get('roster_updated_at'):
                 return True
@@ -188,12 +196,18 @@ def collect(args):
     if args.limit:
         clubs = clubs[:args.limit]
 
-    print(f'Processing {len(clubs)} clubs (freshness: {args.freshness}h)')
+    # Determine ESPN season year per league
+    espn_season = {}  # league_espn_code → year int
+    for lid, s in season_by_league.items():
+        code = league_code_by_id.get(lid)
+        if code and s.get('start_date'):
+            espn_season[code] = int(s['start_date'][:4])
+
+    is_historical = bool(args.season)
+    print(f'Processing {len(clubs)} clubs (freshness: {args.freshness}h, season: {args.season or "current"})')
 
     stats = {'clubs': 0, 'players_upserted': 0, 'transfers': 0, 'new_players': 0, 'errors': 0, 'skipped': 0}
-
-    # Track which espn_ids we see on each club's current roster
-    seen_on_roster = {}  # club_id → set of espn_id strings
+    seen_on_roster = {}
 
     for i, club in enumerate(clubs):
         espn_id = club['espn_team_id']
@@ -204,13 +218,19 @@ def collect(args):
 
         try:
             url = f'{ESPN_BASE}/{league.lower()}/teams/{espn_id}/roster'
+            yr = espn_season.get(league.upper())
+            if yr:
+                url += f'?season={yr}'
+
             data = espn_fetch(url)
             athletes = data.get('athletes', [])
+            espn_season_info = data.get('season', {}).get('displayName', '')
 
             if not athletes:
-                print(f'0 players (empty roster)')
+                print(f'0 players ({espn_season_info or "empty"})')
                 stats['skipped'] += 1
-                sb_patch('club_teams', f'id=eq.{club_id}', {'roster_updated_at': now.isoformat()})
+                if not is_historical:
+                    sb_patch('club_teams', f'id=eq.{club_id}', {'roster_updated_at': now.isoformat()})
                 time.sleep(REQUEST_DELAY)
                 continue
 
@@ -219,7 +239,8 @@ def collect(args):
             transfer_records = []
 
             league_id = league_id_by_code.get(league.upper())
-            season_id = season_by_league.get(league_id) if league_id else None
+            season = season_by_league.get(league_id)
+            season_id = season['id'] if season else None
 
             for a in athletes:
                 espn_player_id = int(a.get('id', 0))
@@ -229,7 +250,6 @@ def collect(args):
                 espn_id_str = str(espn_player_id)
                 roster_espn_ids.add(espn_id_str)
 
-                # Map nationality
                 citizenship = a.get('citizenship', '')
                 mapped_name = NATIONALITY_MAP.get(citizenship, citizenship)
                 nationality_id = nat_by_name.get(mapped_name)
@@ -251,63 +271,73 @@ def collect(args):
                     'primary_position': position_abbr(a.get('position')),
                     'height_cm': inches_to_cm(a.get('height')),
                     'weight_kg': lbs_to_kg(a.get('weight')),
-                    'current_club_id': club_id,
                     'image_url': ESPN_HEADSHOT.format(espn_id=espn_player_id),
                     'updated_at': now.isoformat(),
                 }
+
+                # Only update current_club_id for current season fetches
+                if not is_historical:
+                    row['current_club_id'] = club_id
+
                 player_rows.append(row)
 
-                # Detect transfers: player existed before with a different club
-                prev = existing_players.get(espn_id_str)
-                if prev:
-                    old_club = prev.get('current_club_id')
-                    if old_club and old_club != club_id:
-                        transfer_records.append({
-                            'player_id': prev['id'],
-                            'from_club_id': old_club,
-                            'to_club_id': club_id,
-                            'detected_at': now.isoformat(),
-                            'season_id': season_id,
-                            'type': 'transfer',
-                            'notes': row['name'],
-                        })
-                        stats['transfers'] += 1
-                else:
-                    # New player we haven't seen before
-                    stats['new_players'] += 1
+                # Detect transfers (only for current season)
+                if not is_historical:
+                    prev = existing_players.get(espn_id_str)
+                    if prev:
+                        old_club = prev.get('current_club_id')
+                        if old_club and old_club != club_id:
+                            transfer_records.append({
+                                'player_id': prev['id'],
+                                'from_club_id': old_club,
+                                'to_club_id': club_id,
+                                'detected_at': now.isoformat(),
+                                'season_id': season_id,
+                                'type': 'transfer',
+                                'notes': row['name'],
+                            })
+                            stats['transfers'] += 1
+                    else:
+                        stats['new_players'] += 1
 
             if player_rows:
                 result = sb_upsert('players', player_rows, on_conflict='espn_id')
                 stats['players_upserted'] += len(player_rows)
 
-                # Update existing_players index with new data
-                for r in result:
-                    existing_players[str(r['espn_id'])] = {
-                        'id': r['id'],
-                        'espn_id': r['espn_id'],
-                        'current_club_id': r['current_club_id'],
-                    }
+                if not is_historical:
+                    for r in result:
+                        existing_players[str(r['espn_id'])] = {
+                            'id': r['id'],
+                            'espn_id': r['espn_id'],
+                            'current_club_id': r['current_club_id'],
+                        }
 
-            # Log transfers
             if transfer_records:
                 try:
                     sb_post('transfers', transfer_records)
-                    print(f'{len(player_rows)} players, {len(transfer_records)} transfers', end='')
                 except Exception as e:
                     print(f' (transfer log error: {e})', end='')
 
             seen_on_roster[club_id] = roster_espn_ids
 
-            sb_patch('club_teams', f'id=eq.{club_id}', {'roster_updated_at': now.isoformat()})
+            if not is_historical:
+                sb_patch('club_teams', f'id=eq.{club_id}', {'roster_updated_at': now.isoformat()})
             stats['clubs'] += 1
-            if not transfer_records:
-                print(f'{len(player_rows)} players')
-            else:
-                print()
+
+            detail = f'{len(player_rows)} players'
+            if transfer_records:
+                detail += f', {len(transfer_records)} transfers'
+            if espn_season_info:
+                detail += f' [{espn_season_info}]'
+            print(detail)
 
         except urllib.error.HTTPError as e:
-            body = e.read().decode()[:200] if hasattr(e, 'read') else ''
-            print(f'ERROR: {e} -- {body}')
+            body = ''
+            try:
+                body = e.read().decode()[:200]
+            except Exception:
+                pass
+            print(f'ERROR {e.code}: {body[:80] if body else e.reason}')
             stats['errors'] += 1
         except Exception as e:
             print(f'ERROR: {e}')
@@ -315,28 +345,26 @@ def collect(args):
 
         time.sleep(REQUEST_DELAY)
 
-    # Detect departures: players whose current_club_id is a club we just fetched,
-    # but who are no longer on that club's roster
-    if seen_on_roster and not args.league:
+    # Detect departures (only for current full-league fetches)
+    if seen_on_roster and not args.league and not is_historical:
         print('\nChecking for departures...')
         departed = 0
         for club_id, roster_ids in seen_on_roster.items():
             for espn_id_str, player in existing_players.items():
                 if player.get('current_club_id') == club_id and espn_id_str not in roster_ids:
-                    # Player was at this club but no longer on roster
                     league_id = None
                     for c in clubs:
                         if c['id'] == club_id:
                             league_id = league_id_by_code.get(c['league_espn_code'].upper())
                             break
-                    season_id = season_by_league.get(league_id) if league_id else None
+                    sid = season_by_league.get(league_id, {}).get('id') if league_id else None
                     try:
                         sb_post('transfers', [{
                             'player_id': player['id'],
                             'from_club_id': club_id,
                             'to_club_id': None,
                             'detected_at': now.isoformat(),
-                            'season_id': season_id,
+                            'season_id': sid,
                             'type': 'unknown',
                             'notes': f'No longer on roster (espn_id: {espn_id_str})',
                         }])
@@ -352,13 +380,12 @@ def collect(args):
           f'{stats["errors"]} errors, {stats["skipped"]} empty rosters')
     return stats
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Collect player data from ESPN')
     parser.add_argument('--league', help='Only fetch clubs from this league (e.g. eng.1)')
     parser.add_argument('--limit', type=int, help='Max clubs to process per run')
     parser.add_argument('--freshness', type=int, default=24, help='Re-fetch if older than N hours (default: 24)')
     parser.add_argument('--all', action='store_true', help='Ignore freshness, fetch everything')
+    parser.add_argument('--season', type=int, help='ESPN season year (e.g. 2023 for 2023-24). Skips freshness and transfer detection.')
     args = parser.parse_args()
     collect(args)
