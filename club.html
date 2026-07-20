@@ -194,6 +194,29 @@
   font-size: 11px; color: var(--dim);
 }
 
+/* ── Season selector ──────────────────────────────────────────────────── */
+.season-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 24px;
+}
+.season-bar select {
+  font-size: 13px; padding: 8px 12px;
+  background: var(--card); color: var(--white);
+  border: 1px solid var(--border); border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace; font-weight: 600;
+  cursor: pointer; transition: border-color .2s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='%238a9aa0'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+.season-bar select:focus { border-color: var(--gold); outline: none; }
+.season-bar select option { background: #071810; }
+.season-bar .season-label {
+  font-size: 11px; color: var(--dim);
+}
+
 /* ── Back link ────────────────────────────────────────────────────────── */
 .back-link {
   display: inline-flex; align-items: center; gap: 4px;
@@ -240,11 +263,20 @@ injectNav('data');
 
 const params = new URLSearchParams(location.search);
 const clubId = params.get('id');
+const seasonParam = params.get('season'); // e.g. "2025" or season label "2025-26"
 
 if (!clubId) {
   document.getElementById('status').textContent = 'No club specified.';
 } else {
   loadClub(clubId);
+}
+
+// Called when user changes the season dropdown
+function changeSeason(val) {
+  const url = new URL(location.href);
+  if (val) url.searchParams.set('season', val);
+  else url.searchParams.delete('season');
+  location.href = url.toString();
 }
 
 function calcAge(dob) {
@@ -314,10 +346,10 @@ function renderXferPanel(list, dir, clubId) {
 async function loadClub(id) {
   const status = document.getElementById('status');
   try {
-    const [clubs, players, transfers] = await Promise.all([
+    // Load club + league + seasons in parallel
+    const [clubs, players] = await Promise.all([
       sb(`club_teams?select=*&id=eq.${id}`),
       sb(`players?select=id,name,short_name,primary_position,date_of_birth,height_cm,weight_kg,image_url,espn_id,national_teams:nationality_id(name,flag_emoji)&current_club_id=eq.${id}&order=name`),
-      sb(`transfers?select=*,players!transfers_player_id_fkey(name,image_url),from:club_teams!transfers_from_club_id_fkey(id,name,logo_url),to:club_teams!transfers_to_club_id_fkey(id,name,logo_url)&or=(from_club_id.eq.${id},to_club_id.eq.${id})&order=transfer_date.desc.nullslast&limit=50`),
     ]);
 
     if (!clubs.length) { status.textContent = 'Club not found.'; return; }
@@ -327,12 +359,38 @@ async function loadClub(id) {
     const accent = club.color && club.color !== '000000' ? '#' + club.color : null;
     if (accent) document.documentElement.style.setProperty('--accent', accent);
 
-    // Find league name
+    // Find league info + seasons for this league
     let leagueName = club.league_espn_code;
+    let seasons = [];
     try {
-      const lg = await sb(`leagues?select=name&espn_code=eq.${encodeURIComponent(club.league_espn_code)}&limit=1`);
-      if (lg.length) leagueName = lg[0].name;
-    } catch(e) {}
+      const [lg, ss] = await Promise.all([
+        sb(`leagues?select=id,name,espn_code&espn_code=eq.${encodeURIComponent(club.league_espn_code)}&limit=1`),
+        sb(`seasons?select=id,label,start_date,is_current&league_id=in.(select:id:leagues?espn_code=eq.${encodeURIComponent(club.league_espn_code)})&order=start_date.desc`),
+      ]);
+      if (lg.length) {
+        leagueName = lg[0].name;
+        // Query seasons using league_id
+        seasons = await sb(`seasons?select=id,label,start_date,is_current&league_id=eq.${lg[0].id}&order=start_date.desc`);
+      }
+    } catch(e) { console.warn('Season load error', e); }
+
+    // Determine active season
+    let activeSeason = null;
+    if (seasonParam) {
+      // Match by label or start_date year
+      activeSeason = seasons.find(s => s.label === seasonParam || (s.start_date && s.start_date.startsWith(seasonParam)));
+    }
+    if (!activeSeason) {
+      activeSeason = seasons.find(s => s.is_current) || seasons[0] || null;
+    }
+
+    // Load transfers filtered by season
+    let transferQuery = `transfers?select=*,players!transfers_player_id_fkey(name,image_url),from:club_teams!transfers_from_club_id_fkey(id,name,logo_url),to:club_teams!transfers_to_club_id_fkey(id,name,logo_url)&or=(from_club_id.eq.${id},to_club_id.eq.${id})`;
+    if (activeSeason) {
+      transferQuery += `&season_id=eq.${activeSeason.id}`;
+    }
+    transferQuery += `&order=transfer_date.desc.nullslast&limit=50`;
+    const transfers = await sb(transferQuery);
 
     // Group players by position
     const groups = { GK: [], DF: [], MF: [], FW: [] };
@@ -342,13 +400,22 @@ async function loadClub(id) {
     });
 
     // Roster stats
-    const avgAge = players.filter(p => p.date_of_birth).length
-      ? (players.filter(p => p.date_of_birth).reduce((s, p) => s + calcAge(p.date_of_birth), 0) / players.filter(p => p.date_of_birth).length).toFixed(1)
+    const withDob = players.filter(p => p.date_of_birth);
+    const avgAge = withDob.length
+      ? (withDob.reduce((s, p) => s + calcAge(p.date_of_birth), 0) / withDob.length).toFixed(1)
       : '-';
-    const avgHeight = players.filter(p => p.height_cm).length
-      ? Math.round(players.filter(p => p.height_cm).reduce((s, p) => s + p.height_cm, 0) / players.filter(p => p.height_cm).length)
+    const withHeight = players.filter(p => p.height_cm);
+    const avgHeight = withHeight.length
+      ? Math.round(withHeight.reduce((s, p) => s + p.height_cm, 0) / withHeight.length)
       : '-';
     const nationalities = new Set(players.map(p => p.national_teams?.name).filter(Boolean)).size;
+
+    // Season dropdown
+    const seasonOpts = seasons.map(s => {
+      const val = s.start_date ? s.start_date.slice(0,4) : s.label;
+      const selected = activeSeason && s.id === activeSeason.id ? 'selected' : '';
+      return `<option value="${val}" ${selected}>${s.label}${s.is_current ? ' (current)' : ''}</option>`;
+    }).join('');
 
     let html = `
       <div class="club-hero">
@@ -362,6 +429,11 @@ async function loadClub(id) {
           </div>
         </div>
       </div>
+
+      ${seasons.length ? `<div class="season-bar">
+        <span class="season-label">Season</span>
+        <select onchange="changeSeason(this.value)">${seasonOpts}</select>
+      </div>` : ''}
 
       <div class="roster-strip">
         <div class="rs-cell"><div class="rs-val">${players.length}</div><div class="rs-lbl">Players</div></div>
@@ -419,13 +491,11 @@ async function loadClub(id) {
     const xferIn = transfers.filter(t => String(t.to_club_id) === String(id));
     const xferOut = transfers.filter(t => String(t.from_club_id) === String(id));
 
-    if (xferIn.length || xferOut.length) {
-      html += `<div class="section-title">Transfers</div>`;
-      html += `<div class="xfer-grid">`;
-      html += renderXferPanel(xferIn, 'in', id);
-      html += renderXferPanel(xferOut, 'out', id);
-      html += `</div>`;
-    }
+    html += `<div class="section-title">Transfers${activeSeason ? ' — ' + activeSeason.label : ''}</div>`;
+    html += `<div class="xfer-grid">`;
+    html += renderXferPanel(xferIn, 'in', id);
+    html += renderXferPanel(xferOut, 'out', id);
+    html += `</div>`;
 
     document.getElementById('content').innerHTML = html;
   } catch(e) {
