@@ -79,7 +79,7 @@ def sb_upsert(table, data, on_conflict=None):
     resp = urllib.request.urlopen(req)
     return json.loads(resp.read())
 
-def sb_post(table, data):
+def sb_post(table, data, ignore_conflict=False):
     url = f'{SB_URL}/rest/v1/{table}'
     headers = {
         'apikey': SB_KEY,
@@ -88,8 +88,13 @@ def sb_post(table, data):
         'Prefer': 'return=representation',
     }
     req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=headers, method='POST')
-    resp = urllib.request.urlopen(req)
-    return json.loads(resp.read())
+    try:
+        resp = urllib.request.urlopen(req)
+        return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if ignore_conflict and e.code == 409:
+            return []
+        raise
 
 def sb_patch(table, filters, data):
     url = f'{SB_URL}/rest/v1/{table}?{filters}'
@@ -314,7 +319,7 @@ def collect(args):
 
             if transfer_records:
                 try:
-                    sb_post('transfers', transfer_records)
+                    sb_post('transfers', transfer_records, ignore_conflict=True)
                 except Exception as e:
                     print(f' (transfer log error: {e})', end='')
 

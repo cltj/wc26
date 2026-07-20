@@ -37,14 +37,21 @@ def sb_get(path):
     )
     return json.loads(urllib.request.urlopen(req).read())
 
-def sb_post(table, data):
+def sb_upsert(table, data):
     url = f'{SB_URL}/rest/v1/{table}'
     headers = {
         'apikey': SB_KEY, 'Authorization': f'Bearer {SB_KEY}',
-        'Content-Type': 'application/json', 'Prefer': 'return=representation',
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=representation',
     }
     req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=headers, method='POST')
-    return json.loads(urllib.request.urlopen(req).read())
+    try:
+        return json.loads(urllib.request.urlopen(req).read())
+    except urllib.error.HTTPError as e:
+        # If unique constraint conflict, skip silently
+        if e.code == 409:
+            return []
+        raise
 
 # ── Parsing helpers ───────────────────────────────────────────────────────────
 
@@ -244,7 +251,7 @@ def collect(args):
                     })
 
                 if batch:
-                    sb_post('transfers', batch)
+                    sb_upsert('transfers', batch)
                     stats['inserted'] += len(batch)
 
                 ins = sum(1 for t in transfers if t['direction'] == 'in')
