@@ -653,7 +653,7 @@ function teamSideHtml(name, matchPlayers) {
       if (p.red_card) b += `<span class="mu-ev">🟥</span>`;
       if (p.subbed_out) b += `<span class="mu-sub-out"> ↓${p.sub_minute||''}</span>`;
       if (p.subbed_in) b += `<span class="mu-sub-in"> ↑${p.sub_minute||''}</span>`;
-      return `<div class="mu-player"><span class="mu-jersey">${p.player.shirt_number}</span>${shortName(p.player.name)}${b} <span class="mu-pos">${p.position||''}</span></div>`;
+      return `<div class="mu-player">${shortName(p.player.name)}${b} <span class="mu-pos">${p.position||''}</span></div>`;
     };
     lineupHtml = `<div class="mu-lineup"><div class="mu-lineup-hdr">Starting</div>${starters.map(pLine).join('')}${subs.length ? `<div class="mu-subs-hdr">Subs</div>${subs.map(pLine).join('')}` : ''}</div>`;
   } else if (t.last_formation) {
@@ -810,7 +810,7 @@ function shortName(fullName) {
 
 async function fetchMatchData(schedId) {
   if (matchDetailCache[schedId]) return matchDetailCache[schedId];
-  const rows = await sb(`player_matches?select=*,player:players!player_matches_player_id_fkey(name,shirt_number,national_teams:nationality_id(name))&game_id=eq.${schedId}&order=formation_place`);
+  const rows = await sb(`player_matches?select=*,player:players!player_matches_player_id_fkey(name,national_teams:nationality_id(name))&game_id=eq.${schedId}&order=formation_place`);
   // Map national_teams.name to team_name for compatibility
   rows.forEach(r => { if (r.player) r.player.team_name = r.player.national_teams?.name || ''; });
   matchDetailCache[schedId] = rows;

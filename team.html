@@ -278,7 +278,6 @@ function rosterRow(p) {
   const pg = posGroup(pos);
   const age = calcAge(p.date_of_birth);
   return `<tr>
-    <td class="num-col">${p.shirt_number||''}</td>
     <td><span class="player-name">${p.short_name || p.last_name || p.name}</span>
       <div class="player-club">${p.club||''}</div></td>
     <td><span class="pos-badge pos-${pg.toLowerCase()}">${pos}</span></td>
@@ -312,7 +311,7 @@ async function loadTeam(name) {
 
     // Load squad for this team via squad_players join
     const squadRaw = natTeamId
-      ? await sb(`squad_players?select=shirt_number,position,players!inner(id,name,first_name,last_name,short_name,date_of_birth,primary_position,image_url,nationality_id,club_teams:current_club_id(name))&league_code=eq.FIFA.WORLD&national_team_id=eq.${natTeamId}&order=shirt_number`)
+      ? await sb(`squad_players?select=position,players!inner(id,name,first_name,last_name,short_name,date_of_birth,primary_position,image_url,nationality_id,club_teams:current_club_id(name))&league_code=eq.FIFA.WORLD&national_team_id=eq.${natTeamId}&order=players(name)`)
       : [];
 
     // Flatten squad into player objects matching old format
@@ -322,7 +321,6 @@ async function loadTeam(name) {
       const ct = p.club_teams || {};
       return {
         id: p.id,
-        shirt_number: sq.shirt_number,
         name: p.name,
         last_name: p.last_name,
         short_name: p.short_name,
@@ -589,11 +587,10 @@ async function loadTeam(name) {
     unused.sort((a,b) => {
       const pg = { GK:0, DF:1, MF:2, FW:3 };
       const posA = displayPos(a), posB = displayPos(b);
-      return (pg[posGroup(posA)]??2) - (pg[posGroup(posB)]??2) || (a.shirt_number||99) - (b.shirt_number||99);
+      return (pg[posGroup(posA)]??2) - (pg[posGroup(posB)]??2) || a.name.localeCompare(b.name);
     });
 
     const thead = `<thead><tr>
-      <th class="num-col">#</th>
       <th>Player</th>
       <th>Pos</th>
       <th class="stat-col">Age</th>

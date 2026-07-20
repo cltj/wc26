@@ -19,7 +19,6 @@ th.sorted.asc::after { content:' ↑'; }
 td { padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; vertical-align:middle; }
 tr:hover td { background:rgba(255,255,255,.025); }
 tr.norway-row td { border-left:2px solid var(--norway); }
-.td-num  { font-family:'JetBrains Mono',monospace; color:var(--dim); width:32px; }
 .td-name { font-weight:600; }
 .td-team { color:var(--dim); }
 .td-club { color:var(--dim); max-width:140px; overflow:hidden; text-overflow:ellipsis; }
@@ -59,7 +58,6 @@ tr.norway-row td { border-left:2px solid var(--norway); }
     <table>
       <thead>
         <tr>
-          <th class="td-num" onclick="sortBy('shirt_number')">#</th>
           <th onclick="sortBy('name')">Player</th>
           <th onclick="sortBy('position')">Pos</th>
           <th onclick="sortBy('team_name')">Team</th>
@@ -87,7 +85,7 @@ async function loadAll() {
   try {
     // Load squad_players joined with players, national_teams, club_teams
     const squad = await sb(
-      `squad_players?select=shirt_number,position,` +
+      `squad_players?select=position,` +
       `players!inner(id,name,espn_id,primary_position,image_url,` +
         `national_teams:nationality_id(name,flag_emoji),` +
         `club_teams:current_club_id(name))` +
@@ -107,7 +105,6 @@ async function loadAll() {
       const ct = p.club_teams || {};
       return {
         id: p.id,
-        shirt_number: sq.shirt_number,
         name: p.name,
         position: sq.position || p.primary_position || '',
         team_name: nt.name || '',
@@ -155,7 +152,7 @@ const teamGroup = () => {
 function sortBy(col){
   if(sortCol===col){sortAsc=!sortAsc;}else{sortCol=col;sortAsc=col==='name';}
   document.querySelectorAll('th').forEach(th=>{th.classList.remove('sorted','asc');});
-  const cols=['shirt_number','name','position','team_name','club_name','goals','assists','yellow_cards','red_cards'];
+  const cols=['name','position','team_name','club_name','goals','assists','yellow_cards','red_cards'];
   const th=document.querySelectorAll('th')[cols.indexOf(col)];
   if(th){th.classList.add('sorted');if(sortAsc)th.classList.add('asc');}
   render();
@@ -190,7 +187,7 @@ function render(){
 
   const tbody=document.getElementById('p-tbody');
   if(!players.length){
-    tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--dim);padding:24px">No players found</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;color:var(--dim);padding:24px">No players found</td></tr>`;
     return;
   }
 
@@ -202,7 +199,6 @@ function render(){
   tbody.innerHTML=players.map(p=>{
     const isNor=p.team_name==='Norway';
     return `<tr class="${isNor?'norway-row':''}">
-      <td class="td-num">${p.shirt_number||''}</td>
       <td class="td-name">${p.name}</td>
       <td><span class="pos pos-${p.position}">${p.position}</span></td>
       <td class="td-team">${FLAG_MAP[p.team_name]||p.flag_emoji||''} ${p.team_name}</td>
