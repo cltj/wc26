@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC 2026 – Marathon</title>
+<link rel="stylesheet" href="shared_styles.css">
+<style>
+.loading { color: var(--dim); font-size: 13px; text-align: center; padding: 40px; }
+
+/* All-time leaderboard */
+.marathon-podium { display: flex; justify-content: center; gap: 16px; margin-bottom: 36px; flex-wrap: wrap; }
+.podium-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 24px 20px 18px; text-align: center; width: 160px; position: relative;
+  transition: transform .15s;
+}
+.podium-card:hover { transform: translateY(-2px); }
+.podium-card.gold   { border-color: rgba(240,180,41,.5); box-shadow: 0 4px 24px rgba(240,180,41,.1); }
+.podium-card.silver { border-color: rgba(176,184,196,.3); }
+.podium-card.bronze { border-color: rgba(192,120,64,.3); }
+
+.podium-rank {
+  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+  font-family: 'Bebas Neue', sans-serif; font-size: 18px;
+  width: 28px; height: 28px; line-height: 28px; border-radius: 50%; text-align: center;
+}
+.podium-rank.gold   { background: var(--gold); color: #003; }
+.podium-rank.silver { background: var(--silver); color: #003; }
+.podium-rank.bronze { background: var(--bronze); color: #fff; }
+
+.podium-photo {
+  width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+  margin: 0 auto 10px; display: block; border: 2px solid var(--border);
+}
+.podium-card.gold .podium-photo { border-color: var(--gold); }
+
+.podium-name {
+  font-family: 'Bebas Neue', sans-serif; font-size: 20px;
+  letter-spacing: .06em; margin-bottom: 4px;
+}
+.podium-pts {
+  font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700;
+  color: var(--gold); line-height: 1;
+}
+.podium-pts-label { font-size: 10px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; margin-top: 2px; }
+
+/* Full table */
+.marathon-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+.marathon-table th {
+  background: #0d3320; color: var(--dim); font-weight: 700; font-size: 10px;
+  letter-spacing: .08em; text-transform: uppercase; padding: 10px 12px; text-align: left;
+}
+.marathon-table th.r { text-align: right; }
+.marathon-table td { padding: 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.marathon-table td.mono { font-family: 'JetBrains Mono', monospace; text-align: right; color: var(--dim); }
+.marathon-table td.pts-cell { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 16px; text-align: right; color: var(--gold); }
+.marathon-table tr:hover td { background: rgba(255,255,255,.02); }
+
+.marathon-table .rank-cell { width: 36px; text-align: center; font-weight: 700; }
+.marathon-table .name-cell { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.marathon-table .name-cell img {
+  width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border);
+}
+
+/* Bar chart */
+.bar-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.bar-name { width: 70px; font-size: 12px; font-weight: 600; text-align: right; flex-shrink: 0; }
+.bar-track { flex: 1; height: 22px; background: rgba(255,255,255,.03); border-radius: 4px; overflow: hidden; position: relative; }
+.bar-fill { height: 100%; border-radius: 4px; transition: width .6s ease; }
+.bar-val {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%); color: var(--white);
+}
+
+/* Tournament breakdown */
+.tourn-section { margin-top: 8px; }
+.tourn-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden; margin-bottom: 16px;
+}
+.tourn-hdr {
+  background: #0d5228; padding: 10px 16px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 16px; letter-spacing: .08em; color: var(--gold);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.tourn-hdr .tourn-badge { font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: .06em; }
+.tourn-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tourn-table th {
+  background: rgba(0,0,0,.25); color: var(--dim); font-weight: 700; font-size: 10px;
+  letter-spacing: .06em; padding: 7px 10px; text-align: center;
+}
+.tourn-table th:first-child { text-align: left; }
+.tourn-table td { padding: 8px 10px; border-top: 1px solid var(--border); text-align: center; }
+.tourn-table td:first-child { text-align: left; font-weight: 600; }
+.tourn-table .t-pts { font-weight: 700; color: var(--gold); font-family: 'JetBrains Mono', monospace; }
+
+@media (max-width: 600px) {
+  .podium-card { width: 130px; padding: 20px 14px 14px; }
+  .podium-pts { font-size: 22px; }
+  .marathon-table { font-size: 12px; }
+  .marathon-table th, .marathon-table td { padding: 8px 6px; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="page-header">
+    <div class="tourn-label">Prediction League</div>
+    <h1>Marathon <span>Leaderboard</span></h1>
+    <div class="subtitle">All-time scores across tournaments</div>
+  </div>
+
+  <div id="content">
+    <div class="loading">Loading marathon data...</div>
+  </div>
+</div>
+
+<script src="shared_constants.js"></script>
+<script src="shared_nav.js"></script>
+<script>
+injectNav('marathon');
+
+async function loadMarathon() {
+  const content = document.getElementById('content');
+
+  try {
+    // Fetch marathon scores and participant photos
+    const [scores, participants] = await Promise.all([
+      sb('marathon_scores?select=*&order=points.desc'),
+      sb('participants?select=name,photo_url')
+    ]);
+
+    const photoMap = {};
+    participants.forEach(p => { photoMap[p.name] = p.photo_url; });
+
+    // Group by tournament
+    const tournaments = {};
+    scores.forEach(s => {
+      if (!tournaments[s.tournament]) tournaments[s.tournament] = [];
+      tournaments[s.tournament].push(s);
+    });
+
+    // All-time totals
+    const allTime = {};
+    scores.forEach(s => {
+      if (!allTime[s.participant]) allTime[s.participant] = { pts: 0, exact: 0, winner: 0, bonus: 0, wrong: 0, missed: 0, played: 0, tournaments: 0 };
+      const a = allTime[s.participant];
+      a.pts += s.points; a.exact += s.exact; a.winner += s.winner;
+      a.bonus += s.bonus; a.wrong += s.wrong; a.missed += s.missed;
+      a.played += s.played; a.tournaments++;
+    });
+
+    const sorted = Object.entries(allTime).sort((a, b) => b[1].pts - a[1].pts);
+    const maxPts = sorted[0]?.[1].pts || 1;
+
+    // Podium (top 3)
+    const medals = ['gold', 'silver', 'bronze'];
+    const podiumHTML = sorted.slice(0, 3).map(([name, t], i) => `
+      <div class="podium-card ${medals[i]}">
+        <div class="podium-rank ${medals[i]}">${i + 1}</div>
+        <img class="podium-photo" src="${photoMap[name] || ''}" alt="${name}">
+        <div class="podium-name">${name}</div>
+        <div class="podium-pts">${t.pts}</div>
+        <div class="podium-pts-label">points</div>
+      </div>
+    `).join('');
+
+    // Bar chart
+    const barColors = ['var(--gold)', 'var(--silver)', 'var(--bronze)', 'var(--green)', 'var(--dim)', '#7ab4f0', '#f07070'];
+    const barsHTML = sorted.map(([name, t], i) => `
+      <div class="bar-wrap">
+        <div class="bar-name">${name}</div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${(t.pts / maxPts * 100).toFixed(1)}%;background:${barColors[i] || 'var(--dim)'}"></div>
+          <span class="bar-val">${t.pts}</span>
+        </div>
+      </div>
+    `).join('');
+
+    // Full table
+    const tableHTML = sorted.map(([name, t], i) => {
+      const accuracy = t.played > 0 ? Math.round((t.exact + t.winner) / t.played * 100) : 0;
+      return `
+      <tr>
+        <td class="rank-cell">${i + 1}</td>
+        <td><div class="name-cell"><img src="${photoMap[name] || ''}" alt="${name}"> ${name}</div></td>
+        <td class="pts-cell">${t.pts}</td>
+        <td class="mono">${accuracy}%</td>
+        <td class="mono">${t.exact}</td>
+        <td class="mono">${t.winner}</td>
+        <td class="mono">${t.bonus}</td>
+        <td class="mono">${t.wrong}</td>
+        <td class="mono">${t.missed}</td>
+        <td class="mono">${t.played}</td>
+        <td class="mono">${t.tournaments}</td>
+      </tr>`;
+    }).join('');
+
+    // Tournament breakdown cards
+    const tournKeys = Object.keys(tournaments).sort();
+    const tournHTML = tournKeys.map(tName => {
+      const rows = tournaments[tName].sort((a, b) => b.points - a.points);
+      return `
+        <div class="tourn-card">
+          <div class="tourn-hdr">
+            <span>${tName}</span>
+            <span class="tourn-badge">${rows[0]?.played || 0} GAMES</span>
+          </div>
+          <table class="tourn-table">
+            <tr><th>Player</th><th>Pts</th><th>Acc.</th><th>Exact</th><th>Winner</th><th>Bonus</th><th>Miss</th><th>Skipped</th><th>Played</th></tr>
+            ${rows.map((r, i) => {
+              const acc = r.played > 0 ? Math.round((r.exact + r.winner) / r.played * 100) : 0;
+              return `
+              <tr>
+                <td>${i === 0 ? '&#127942; ' : ''}${r.participant}</td>
+                <td class="t-pts">${r.points}</td>
+                <td>${acc}%</td>
+                <td>${r.exact}</td><td>${r.winner}</td><td>${r.bonus}</td>
+                <td>${r.wrong}</td><td>${r.missed}</td><td>${r.played}</td>
+              </tr>`;
+            }).join('')}
+          </table>
+        </div>
+      `;
+    }).join('');
+
+    content.innerHTML = `
+      <div class="marathon-podium">${podiumHTML}</div>
+
+      <div class="section-title">Points Overview</div>
+      <div style="margin-bottom:32px">${barsHTML}</div>
+
+      <div class="section-title">All-Time Standings</div>
+      <div style="overflow-x:auto">
+        <table class="marathon-table">
+          <tr>
+            <th>#</th><th>Player</th><th class="r">Pts</th><th class="r">Acc.</th>
+            <th class="r">Exact</th><th class="r">Winner</th><th class="r">Bonus</th>
+            <th class="r">Miss</th><th class="r">Skipped</th><th class="r">Played</th><th class="r">Events</th>
+          </tr>
+          ${tableHTML}
+        </table>
+      </div>
+
+      <div class="section-title">Tournament Breakdown</div>
+      <div class="tourn-section">${tournHTML}</div>
+    `;
+  } catch (e) {
+    content.innerHTML = `<div class="loading" style="color:var(--red)">Error loading data: ${e.message}</div>`;
+  }
+}
+
+loadMarathon();
+</script>
+</body>
+</html>

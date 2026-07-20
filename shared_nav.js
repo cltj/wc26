@@ -5,6 +5,7 @@ const NAV_PAGES = [
   { href:'bracket.html',  label:'🏆 Bracket',   key:'bracket'  },
   { href:'teams.html',    label:'🌍 Teams',     key:'teams'    },
   { href:'players.html',  label:'👤 Players',   key:'players'  },
+  { href:'marathon.html', label:'🏅 Marathon',  key:'marathon' },
 ];
 
 function injectNav(activePage) {
