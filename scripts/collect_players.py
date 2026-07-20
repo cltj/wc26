@@ -317,6 +317,27 @@ def collect(args):
                             'current_club_id': r['current_club_id'],
                         }
 
+                # Record season roster membership
+                if season_id and result:
+                    csp_rows = []
+                    for r in result:
+                        # Find position from player_rows by espn_id
+                        pos = None
+                        for pr in player_rows:
+                            if pr['espn_id'] == r['espn_id']:
+                                pos = pr.get('primary_position')
+                                break
+                        csp_rows.append({
+                            'club_id': club_id,
+                            'season_id': season_id,
+                            'player_id': r['id'],
+                            'position': pos,
+                        })
+                    try:
+                        sb_upsert('club_season_players', csp_rows, on_conflict='club_id,season_id,player_id')
+                    except Exception as e:
+                        print(f' (roster log error: {e})', end='')
+
             if transfer_records:
                 try:
                     sb_post('transfers', transfer_records, ignore_conflict=True)

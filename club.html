@@ -347,12 +347,8 @@ function renderXferPanel(list, dir, clubId) {
 async function loadClub(id) {
   const status = document.getElementById('status');
   try {
-    // Load club + league + seasons in parallel
-    const [clubs, players] = await Promise.all([
-      sb(`club_teams?select=*&id=eq.${id}`),
-      sb(`players?select=id,name,short_name,primary_position,date_of_birth,height_cm,weight_kg,image_url,espn_id,national_teams:nationality_id(name,flag_emoji)&current_club_id=eq.${id}&order=name`),
-    ]);
-
+    // Load club info
+    const clubs = await sb(`club_teams?select=*&id=eq.${id}`);
     if (!clubs.length) { status.textContent = 'Club not found.'; return; }
     const club = clubs[0];
     document.title = `WC 2026 – ${club.name}`;
@@ -360,7 +356,7 @@ async function loadClub(id) {
     const accent = club.color && club.color !== '000000' ? '#' + club.color : null;
     if (accent) document.documentElement.style.setProperty('--accent', accent);
 
-    // Find league info + seasons for this league
+    // Find league info + seasons
     let leagueName = club.league_espn_code;
     let seasons = [];
     try {
@@ -374,11 +370,24 @@ async function loadClub(id) {
     // Determine active season
     let activeSeason = null;
     if (seasonParam) {
-      // Match by label or start_date year
       activeSeason = seasons.find(s => s.label === seasonParam || (s.start_date && s.start_date.startsWith(seasonParam)));
     }
     if (!activeSeason) {
       activeSeason = seasons.find(s => s.is_current) || seasons[0] || null;
+    }
+
+    // Load players — from club_season_players if we have historical data, else current_club_id
+    let players = [];
+    if (activeSeason) {
+      // Try season-specific roster first
+      const csp = await sb(`club_season_players?select=position,players!inner(id,name,short_name,primary_position,date_of_birth,height_cm,weight_kg,image_url,espn_id,national_teams:nationality_id(name,flag_emoji))&club_id=eq.${id}&season_id=eq.${activeSeason.id}&order=players(name)`);
+      if (csp.length) {
+        players = csp.map(r => ({ ...r.players, primary_position: r.position || r.players.primary_position }));
+      }
+    }
+    // Fallback to current roster
+    if (!players.length) {
+      players = await sb(`players?select=id,name,short_name,primary_position,date_of_birth,height_cm,weight_kg,image_url,espn_id,national_teams:nationality_id(name,flag_emoji)&current_club_id=eq.${id}&order=name`);
     }
 
     // Load transfers filtered by season
