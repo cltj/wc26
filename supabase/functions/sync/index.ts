@@ -722,13 +722,17 @@ Deno.serve(async (req) => {
         l(`  Processing ${homeTeam} vs ${awayTeam} (ESPN ${espnId})...`)
         const matchData = await espnMatchData(espnId)
 
-        // Update team formations/starting XI/substitutes (legacy format)
+        // Update team formations/starting XI/substitutes in tournament_teams
         for (const lu of matchData.teamLineups) {
-          await supabase.from('teams').update({
-            last_formation: lu.formation,
-            last_starting_xi: lu.starters,
-            last_substitutes: lu.substitutes,
-          }).eq('name', lu.team)
+          // Look up team_id from teams table
+          const { data: teamRow } = await supabase.from('teams').select('id').eq('name', lu.team).single()
+          if (teamRow) {
+            await supabase.from('tournament_teams').update({
+              last_formation: lu.formation,
+              last_starting_xi: lu.starters,
+              last_substitutes: lu.substitutes,
+            }).eq('team_id', teamRow.id).eq('tournament', 'WC 2026')
+          }
         }
 
         // Write match stats to schedule table
@@ -920,7 +924,12 @@ Deno.serve(async (req) => {
       if (allPredGames) allPredGames.forEach(g => gameById[g.id] = g)
 
       // Also get group standings for R32 resolution
-      const { data: teams } = await supabase.from('teams').select('name,group_letter').order('group_letter,name')
+      // Join tournament_teams with teams to get name + group_letter
+      const { data: ttRows } = await supabase.from('tournament_teams')
+        .select('group_letter,teams(name)')
+        .eq('tournament', 'WC 2026')
+        .order('group_letter')
+      const teams = (ttRows || []).map((r: any) => ({ name: r.teams.name, group_letter: r.group_letter }))
       const { data: sched } = await supabase.from('schedule').select('home_team,away_team,home_score,away_score,status,group_name').order('id')
 
       let slotUpdates = 0

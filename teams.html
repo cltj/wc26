@@ -76,7 +76,7 @@ async function loadTeams() {
   const status = document.getElementById('teams-status');
   try {
     // Load teams from Supabase
-    allTeams = await sb('teams?select=*&order=group_letter,name');
+    allTeams = await loadTournamentTeams();
 
     // Try to get match data from worldcup26.ir for form
     try {

@@ -63,7 +63,7 @@ async function loadGroups() {
 
   try {
     const [teams, schedule] = await Promise.all([
-      sb('teams?select=name,group_letter&order=group_letter,name'),
+      loadTournamentTeams(),
       sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id')
     ]);
 

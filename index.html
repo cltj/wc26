@@ -290,7 +290,7 @@ async function load() {
   const [games, preds, teams, sched, participants, lockRows] = await Promise.all([
     sb('games?select=*&order=id'),
     sb('predictions?select=*'),
-    sb('teams?select=name,group_letter,confederation,last_formation,last_starting_xi&order=name'),
+    loadTournamentTeams(),
     sb('schedule?select=*&order=match_date,kickoff_time,id'),
     sb('participants?select=name,photo_url'),
     sb('sync_state?key=eq.round_locks&select=value'),

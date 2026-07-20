@@ -94,7 +94,7 @@ async function loadAll() {
       if(b.length<500) break;
       from+=500;
     }
-    allTeamsData = await sb('teams?select=name,group_letter&order=group_letter,name');
+    allTeamsData = await loadTournamentTeams();
     allPlayers = p;
     populateTeamDropdown('');
     status.style.display='none';

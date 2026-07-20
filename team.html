@@ -320,7 +320,7 @@ async function loadTeam(name) {
       });
 
     const [teams, players, schedule, allPlayers, playerMatches] = await Promise.all([
-      sb(`teams?select=*&name=eq.${encodeURIComponent(name)}`),
+      loadTournamentTeams().then(all => all.filter(t => t.name === name)),
       sb(`players?select=*&team_name=eq.${encodeURIComponent(name)}&order=shirt_number`),
       sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id'),
       allPlayersP,
@@ -391,7 +391,7 @@ async function loadTeam(name) {
       </div>`;
 
     // WC Ranking
-    const allTeams = await sb('teams?select=name&order=name');
+    const allTeams = await loadTournamentTeams();
     const teamStats = {};
     allTeams.forEach(t => { teamStats[t.name] = { pts:0, gf:0, name:t.name }; });
     schedule.filter(m => m.status === 'FT').forEach(m => {

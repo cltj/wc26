@@ -72,6 +72,23 @@ async function verifyPin(name, pin) {
   return rows && rows.length > 0;
 }
 
+// ── Tournament teams helper ──────────────────────────────────────────────────
+// Fetches tournament_teams joined with teams, returns flat array like the old teams table
+async function loadTournamentTeams(tournament = 'WC 2026') {
+  const rows = await sb(`tournament_teams?select=team_id,group_letter,eliminated,last_formation,last_starting_xi,last_substitutes,teams(id,name,flag_emoji,confederation)&tournament=eq.${encodeURIComponent(tournament)}&order=group_letter`);
+  return rows.map(r => ({
+    id: r.teams.id,
+    name: r.teams.name,
+    flag_emoji: r.teams.flag_emoji,
+    confederation: r.teams.confederation,
+    group_letter: r.group_letter,
+    eliminated: r.eliminated,
+    last_formation: r.last_formation,
+    last_starting_xi: r.last_starting_xi,
+    last_substitutes: r.last_substitutes,
+  })).sort((a, b) => (a.group_letter || '').localeCompare(b.group_letter || '') || a.name.localeCompare(b.name));
+}
+
 // ── Scoring ──────────────────────────────────────────────────────────────────
 function isValidScore(s) {
   if (!s) return false;
