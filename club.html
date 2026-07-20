@@ -364,13 +364,9 @@ async function loadClub(id) {
     let leagueName = club.league_espn_code;
     let seasons = [];
     try {
-      const [lg, ss] = await Promise.all([
-        sb(`leagues?select=id,name,espn_code&espn_code=eq.${encodeURIComponent(club.league_espn_code)}&limit=1`),
-        sb(`seasons?select=id,label,start_date,is_current&league_id=in.(select:id:leagues?espn_code=eq.${encodeURIComponent(club.league_espn_code)})&order=start_date.desc`),
-      ]);
+      const lg = await sb(`leagues?select=id,name,espn_code&espn_code=eq.${encodeURIComponent(club.league_espn_code)}&limit=1`);
       if (lg.length) {
         leagueName = lg[0].name;
-        // Query seasons using league_id
         seasons = await sb(`seasons?select=id,label,start_date,is_current&league_id=eq.${lg[0].id}&order=start_date.desc`);
       }
     } catch(e) { console.warn('Season load error', e); }
