@@ -33,7 +33,7 @@ tr.norway-row td { border-left:2px solid var(--norway); }
   <div class="page-header">
     <div class="tourn-label">FIFA World Cup 2026</div>
     <h1>Player <span>Stats</span></h1>
-    <div class="subtitle">1,248 players · All 48 squads · Search & filter</div>
+    <div class="subtitle">All squads · Search & filter</div>
   </div>
 
   <div class="controls">
@@ -63,9 +63,8 @@ tr.norway-row td { border-left:2px solid var(--norway); }
           <th onclick="sortBy('name')">Player</th>
           <th onclick="sortBy('position')">Pos</th>
           <th onclick="sortBy('team_name')">Team</th>
-          <th onclick="sortBy('club')">Club</th>
+          <th onclick="sortBy('club_name')">Club</th>
           <th onclick="sortBy('goals')"    title="Goals">⚽</th>
-          <th onclick="sortBy('own_goals')" title="Own goals">OG</th>
           <th onclick="sortBy('assists')"  title="Assists">🎯</th>
           <th onclick="sortBy('yellow_cards')" title="Yellow cards">🟨</th>
           <th onclick="sortBy('red_cards')"    title="Red cards">🟥</th>
@@ -86,20 +85,48 @@ let allPlayers=[], allTeamsData=[], sortCol='name', sortAsc=true;
 async function loadAll() {
   const status = document.getElementById('p-status');
   try {
-    let p=[], from=0;
-    while(true){
-      const b = await sb(`players?select=*&order=team_name,shirt_number&limit=500&offset=${from}`);
-      if(!b||!b.length) break;
-      p=p.concat(b);
-      if(b.length<500) break;
-      from+=500;
-    }
+    // Load squad_players joined with players, national_teams, club_teams
+    const squad = await sb(
+      `squad_players?select=shirt_number,position,` +
+      `players!inner(id,name,espn_id,primary_position,image_url,` +
+        `national_teams:nationality_id(name,flag_emoji),` +
+        `club_teams:current_club_id(name))` +
+      `&league_code=eq.FIFA.WORLD&order=players(name)`
+    );
+
+    // Load stats from the view
+    const stats = await sb('player_stats?select=*');
+    const statsById = {};
+    stats.forEach(s => statsById[s.player_id] = s);
+
+    // Flatten into a single array
+    allPlayers = squad.map(sq => {
+      const p = sq.players;
+      const s = statsById[p.id] || {};
+      const nt = p.national_teams || {};
+      const ct = p.club_teams || {};
+      return {
+        id: p.id,
+        shirt_number: sq.shirt_number,
+        name: p.name,
+        position: sq.position || p.primary_position || '',
+        team_name: nt.name || '',
+        flag_emoji: nt.flag_emoji || '',
+        club_name: ct.name || '',
+        goals: s.goals || 0,
+        assists: s.assists || 0,
+        yellow_cards: s.yellow_cards || 0,
+        red_cards: s.red_cards || 0,
+        matches_played: s.matches_played || 0,
+      };
+    });
+
     allTeamsData = await loadTournamentTeams();
-    allPlayers = p;
     populateTeamDropdown('');
     status.style.display='none';
+    document.querySelector('.subtitle').textContent = `${allPlayers.length} players · All ${allTeamsData.length} squads · Search & filter`;
     render();
-  } catch(e) { status.textContent='Error: '+e.message; }
+  } catch(e) { status.textContent='Error: '+e.message; console.error(e); }
 }
 
 function populateTeamDropdown(grp) {
@@ -128,7 +155,7 @@ const teamGroup = () => {
 function sortBy(col){
   if(sortCol===col){sortAsc=!sortAsc;}else{sortCol=col;sortAsc=col==='name';}
   document.querySelectorAll('th').forEach(th=>{th.classList.remove('sorted','asc');});
-  const cols=['shirt_number','name','position','team_name','club','goals','own_goals','assists','yellow_cards','red_cards'];
+  const cols=['shirt_number','name','position','team_name','club_name','goals','assists','yellow_cards','red_cards'];
   const th=document.querySelectorAll('th')[cols.indexOf(col)];
   if(th){th.classList.add('sorted');if(sortAsc)th.classList.add('asc');}
   render();
@@ -142,7 +169,7 @@ function render(){
   const tg  =teamGroup();
 
   let players=allPlayers.filter(p=>{
-    if(q    &&!p.name.toLowerCase().includes(q)&&!(p.club||'').toLowerCase().includes(q)) return false;
+    if(q    &&!p.name.toLowerCase().includes(q)&&!p.club_name.toLowerCase().includes(q)) return false;
     if(grp  &&tg[p.team_name]!==grp) return false;
     if(team &&p.team_name!==team) return false;
     if(pos  &&p.position!==pos) return false;
@@ -163,7 +190,7 @@ function render(){
 
   const tbody=document.getElementById('p-tbody');
   if(!players.length){
-    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--dim);padding:24px">No players found</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--dim);padding:24px">No players found</td></tr>`;
     return;
   }
 
@@ -175,13 +202,12 @@ function render(){
   tbody.innerHTML=players.map(p=>{
     const isNor=p.team_name==='Norway';
     return `<tr class="${isNor?'norway-row':''}">
-      <td class="td-num">${p.shirt_number}</td>
+      <td class="td-num">${p.shirt_number||''}</td>
       <td class="td-name">${p.name}</td>
       <td><span class="pos pos-${p.position}">${p.position}</span></td>
-      <td class="td-team">${FLAG_MAP[p.team_name]||''} ${p.team_name}</td>
-      <td class="td-club">${p.club||'—'}</td>
+      <td class="td-team">${FLAG_MAP[p.team_name]||p.flag_emoji||''} ${p.team_name}</td>
+      <td class="td-club">${p.club_name||'—'}</td>
       ${stat(p.goals)}
-      ${stat(p.own_goals)}
       ${stat(p.assists)}
       ${stat(p.yellow_cards,'#f0b429')}
       ${stat(p.red_cards,'#e03434')}

@@ -182,9 +182,7 @@ if (!teamName) {
 
 function calcAge(dobStr) {
   if (!dobStr) return null;
-  const parts = dobStr.split('/');
-  if (parts.length !== 3) return null;
-  const dob = new Date(+parts[2], +parts[0]-1, +parts[1]);
+  const dob = new Date(dobStr);
   const now = new Date();
   let age = now.getFullYear() - dob.getFullYear();
   if (now.getMonth() < dob.getMonth() || (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate())) age--;
@@ -200,9 +198,9 @@ function posGroup(pos) {
   return 'MF';
 }
 
-// Get best display position: prefer espn_position, fall back to fifa_position/position
+// Get best display position
 function displayPos(player) {
-  return player.espn_position || player.fifa_position || player.position || '—';
+  return player.position || player.primary_position || '—';
 }
 
 // ── Position ranking for formation row assignment ──
@@ -278,10 +276,10 @@ function statSort(a, b) {
 function rosterRow(p) {
   const pos = displayPos(p);
   const pg = posGroup(pos);
-  const age = calcAge(p.dob);
+  const age = calcAge(p.date_of_birth);
   return `<tr>
     <td class="num-col">${p.shirt_number||''}</td>
-    <td><span class="player-name">${p.name_on_shirt || p.last_name || p.name}</span>
+    <td><span class="player-name">${p.short_name || p.last_name || p.name}</span>
       <div class="player-club">${p.club||''}</div></td>
     <td><span class="pos-badge pos-${pg.toLowerCase()}">${pos}</span></td>
     <td class="stat-col">${age !== null ? age : '—'}</td>
@@ -298,34 +296,71 @@ async function loadTeam(name) {
   const content = document.getElementById('team-content');
 
   try {
-    // Fetch team, squad, schedule, and all players (for tournament ranking)
-    const allPlayersP = (async () => {
-      const rows = [];
-      let offset = 0;
-      while (true) {
-        const batch = await sb(`players?select=name,team_name,goals,assists,yellow_cards,red_cards,matches_played&order=name&offset=${offset}&limit=500`);
-        rows.push(...batch);
-        if (batch.length < 500) break;
-        offset += 500;
-      }
-      return rows;
-    })();
+    // Fetch team, squad (via squad_players), schedule, stats, and player_matches
+    const natTeamP = sb(`national_teams?select=id&name=eq.${encodeURIComponent(name)}`);
 
-    // Also fetch player_matches for this team's players
-    const playerMatchesP = sb(`players?select=id&team_name=eq.${encodeURIComponent(name)}`)
-      .then(ids => {
-        if (!ids.length) return [];
-        const idList = ids.map(p => p.id).join(',');
-        return sb(`player_matches?select=*&player_id=in.(${idList})&order=game_id`);
-      });
-
-    const [teams, players, schedule, allPlayers, playerMatches] = await Promise.all([
+    const [teams, schedule, statsAll, natTeamRows] = await Promise.all([
       loadTournamentTeams().then(all => all.filter(t => t.name === name)),
-      sb(`players?select=*&team_name=eq.${encodeURIComponent(name)}&order=shirt_number`),
       sb('schedule?select=home_team,away_team,home_score,away_score,status,group_name&order=id'),
-      allPlayersP,
-      playerMatchesP,
+      sb('player_stats?select=*'),
+      natTeamP,
     ]);
+
+    const natTeamId = natTeamRows?.[0]?.id;
+    const statsById = {};
+    statsAll.forEach(s => statsById[s.player_id] = s);
+
+    // Load squad for this team via squad_players join
+    const squadRaw = natTeamId
+      ? await sb(`squad_players?select=shirt_number,position,players!inner(id,name,first_name,last_name,short_name,date_of_birth,primary_position,image_url,nationality_id,club_teams:current_club_id(name))&league_code=eq.FIFA.WORLD&national_team_id=eq.${natTeamId}&order=shirt_number`)
+      : [];
+
+    // Flatten squad into player objects matching old format
+    const players = squadRaw.map(sq => {
+      const p = sq.players;
+      const s = statsById[p.id] || {};
+      const ct = p.club_teams || {};
+      return {
+        id: p.id,
+        shirt_number: sq.shirt_number,
+        name: p.name,
+        last_name: p.last_name,
+        short_name: p.short_name,
+        position: sq.position || p.primary_position || '',
+        primary_position: p.primary_position,
+        club: ct.name || '',
+        date_of_birth: p.date_of_birth,
+        image_url: p.image_url,
+        goals: s.goals || 0,
+        assists: s.assists || 0,
+        yellow_cards: s.yellow_cards || 0,
+        red_cards: s.red_cards || 0,
+        matches_played: s.matches_played || 0,
+      };
+    });
+
+    // All players for tournament ranking (via squad_players + stats)
+    const allSquadRaw = await sb(
+      `squad_players?select=players!inner(id,name),national_teams:national_team_id(name)&league_code=eq.FIFA.WORLD`
+    );
+    const allPlayers = allSquadRaw.map(sq => {
+      const s = statsById[sq.players.id] || {};
+      return {
+        name: sq.players.name,
+        team_name: sq.national_teams?.name || '',
+        goals: s.goals || 0,
+        assists: s.assists || 0,
+        yellow_cards: s.yellow_cards || 0,
+        red_cards: s.red_cards || 0,
+        matches_played: s.matches_played || 0,
+      };
+    });
+
+    // Player matches for this team
+    const playerIds = players.map(p => p.id);
+    const playerMatches = playerIds.length
+      ? await sb(`player_matches?select=*&player_id=in.(${playerIds.join(',')})&order=game_id`)
+      : [];
 
     // Build lookup: player_id → latest player_matches entry
     const pmByPlayer = {};
@@ -454,7 +489,7 @@ async function loadTeam(name) {
           const rank = findRank(p, allSorted, x => (x.goals||0)+(x.assists||0));
           hotColdHtml += `<div class="hc-row">
             <span class="hc-rank">#${rank}</span>
-            <span class="hc-name">${p.name_on_shirt||p.last_name||p.name}</span>
+            <span class="hc-name">${p.short_name||p.last_name||p.name}</span>
             <span class="hc-cols hc-stat hot">${g}</span><span class="hc-cols hc-stat hot">${a}</span><span class="hc-cols hc-stat hot">${pts}</span>
           </div>`;
         });
@@ -472,7 +507,7 @@ async function loadTeam(name) {
           const rank = findRank(p, allCarded, x => (x.yellow_cards||0)+(x.red_cards||0)*3);
           hotColdHtml += `<div class="hc-row">
             <span class="hc-rank">#${rank}</span>
-            <span class="hc-name">${p.name_on_shirt||p.last_name||p.name}</span>
+            <span class="hc-name">${p.short_name||p.last_name||p.name}</span>
             <span class="hc-cols hc-stat cold">${y}</span><span class="hc-cols hc-stat cold">${r}</span>
           </div>`;
         });

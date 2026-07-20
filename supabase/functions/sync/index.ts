@@ -635,20 +635,19 @@ Deno.serve(async (req) => {
     l(`New finished games to process: ${newFinished.length}`)
 
     if (newFinished.length > 0) {
-      // Load all players for matching
-      let allPlayers: any[] = []
-      let offset = 0
-      while (true) {
-        const { data } = await supabase
-          .from('players')
-          .select('id,name,name_on_shirt,team_name,goals,assists,yellow_cards,red_cards,matches_played,espn_id')
-          .order('team_name')
-          .range(offset, offset + 499)
-        if (!data || data.length === 0) break
-        allPlayers = allPlayers.concat(data)
-        if (data.length < 500) break
-        offset += 500
-      }
+      // Load all WC squad players for matching (via squad_players → players)
+      const { data: squadRows } = await supabase
+        .from('squad_players')
+        .select('player_id,national_team_id,players!inner(id,name,short_name,espn_id),national_teams:national_team_id(name)')
+        .eq('league_code', 'FIFA.WORLD')
+
+      let allPlayers: any[] = (squadRows || []).map((sq: any) => ({
+        id: sq.players.id,
+        name: sq.players.name,
+        name_on_shirt: sq.players.short_name,
+        team_name: sq.national_teams?.name || '',
+        espn_id: sq.players.espn_id,
+      }))
 
       const playersByTeam: Record<string, typeof allPlayers> = {}
       for (const pl of allPlayers) {
@@ -854,21 +853,12 @@ Deno.serve(async (req) => {
         processedGames.add(gameKey)
       }
 
-      // ── Step 6: Write aggregated stats + appearances to players ───────
+      // ── Step 6: Log stats + update espn_id where missing ───────
+      // Stats are now computed from player_matches via the player_stats view.
+      // We only need to update espn_id on the players table when discovered.
       let playerUpdates = 0
       for (const [pidStr, delta] of Object.entries(statDeltas)) {
-        const pid = Number(pidStr)
-        const player = allPlayers.find(p => p.id === pid)
-        if (!player) continue
-
-        const updates: Record<string, any> = {}
-        if (delta.goals > 0) updates.goals = (player.goals || 0) + delta.goals
-        if (delta.assists > 0) updates.assists = (player.assists || 0) + delta.assists
-        if (delta.yellows > 0) updates.yellow_cards = (player.yellow_cards || 0) + delta.yellows
-        if (delta.reds > 0) updates.red_cards = (player.red_cards || 0) + delta.reds
-
-        if (Object.keys(updates).length > 0) {
-          await supabase.from('players').update(updates).eq('id', pid)
+        if (delta.goals > 0 || delta.assists > 0 || delta.yellows > 0 || delta.reds > 0) {
           playerUpdates++
           logData.player_stats.push({
             player: delta.name, team: delta.team,
@@ -880,18 +870,13 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Update matches_played, espn_id, espn_position for all who appeared
+      // Update espn_id for players where we discovered it
       for (const [pidStr, app] of Object.entries(playerAppearances)) {
         const pid = Number(pidStr)
         const player = allPlayers.find(p => p.id === pid)
-        if (!player) continue
-
-        const updates: Record<string, any> = {}
-        updates.matches_played = (player.matches_played || 0) + app.count
-        if (app.espnId && !player.espn_id) updates.espn_id = app.espnId
-        if (app.espnPosition) updates.espn_position = app.espnPosition
-
-        await supabase.from('players').update(updates).eq('id', pid)
+        if (player && app.espnId && !player.espn_id) {
+          await supabase.from('players').update({ espn_id: app.espnId }).eq('id', pid)
+        }
       }
 
       logData.player_updates = playerUpdates

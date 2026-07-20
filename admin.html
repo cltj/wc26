@@ -246,21 +246,8 @@ async function applySync(parsed) {
   }
   if(gameUpdates) log(`✓ ${gameUpdates} game results updated`,'ok');
 
-  const pm={};
-  for(const p of (parsed.top_scorers||[])){const k=p.name.toLowerCase();pm[k]={...pm[k],name:p.name,team:p.team,goals:p.goals||0,assists:p.assists||0};}
-  for(const p of (parsed.bookings||[])){const k=p.name.toLowerCase();pm[k]={...pm[k],name:p.name,team:p.team,yellow_cards:p.yellow_cards||0,red_cards:p.red_cards||0};}
-  let pu=0;
-  for(const p of Object.values(pm)){
-    const u={};
-    if(p.goals!==undefined)u.goals=p.goals;if(p.assists!==undefined)u.assists=p.assists;
-    if(p.yellow_cards!==undefined)u.yellow_cards=p.yellow_cards;if(p.red_cards!==undefined)u.red_cards=p.red_cards;
-    if(!Object.keys(u).length)continue;
-    const ln=p.name.split(' ').pop();
-    let url=`players?name=ilike.${encodeURIComponent('%'+ln+'%')}`;
-    if(p.team)url+=`&team_name=eq.${encodeURIComponent(p.team)}`;
-    try{await sbAdmin(url,{method:'PATCH',body:JSON.stringify(u)});pu++;}catch(e){}
-  }
-  if(pu) log(`✓ ${pu} player stats updated`,'ok');
+  // Player stats are now computed from player_matches via player_stats view
+  // No manual player stat patching needed
   if(gameUpdates) await loadGames();
   log('✓ Sync complete','ok');
 }
