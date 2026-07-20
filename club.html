@@ -121,27 +121,78 @@
   font-size: 20px; letter-spacing: .5px;
   color: var(--gold); margin-bottom: 12px; margin-top: 32px;
 }
-.transfer-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px; font-size: 12px;
+.xfer-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  margin-top: 8px;
+}
+.xfer-panel {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden;
+}
+.xfer-panel-hdr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px; letter-spacing: .5px;
   border-bottom: 1px solid var(--border);
 }
-.transfer-row:last-child { border-bottom: none; }
-.xfer-dir {
+.xfer-panel-hdr .xfer-cnt {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px; font-weight: 700;
-  width: 28px; text-align: center;
-  padding: 3px 0; border-radius: 3px;
-  flex-shrink: 0;
+  font-size: 10px; font-weight: 600;
+  padding: 2px 7px; border-radius: 3px;
 }
-.xfer-in  { background: rgba(96,185,122,.12); color: var(--green); }
-.xfer-out { background: rgba(224,112,112,.1);  color: #e07070; }
-.xfer-name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.xfer-club { color: var(--dim); font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
-.xfer-fee  { font-family: 'JetBrains Mono', monospace; color: var(--gold); font-size: 11px; flex-shrink: 0; }
-.xfer-date { font-family: 'JetBrains Mono', monospace; color: var(--dim); font-size: 10px; flex-shrink: 0; }
-.xfer-type-loan { color: #7ab4f0; }
-.xfer-type-free { color: var(--green); }
+.xfer-panel-in .xfer-panel-hdr { color: var(--green); }
+.xfer-panel-in .xfer-cnt { background: rgba(96,185,122,.1); color: var(--green); }
+.xfer-panel-out .xfer-panel-hdr { color: #e07070; }
+.xfer-panel-out .xfer-cnt { background: rgba(224,112,112,.08); color: #e07070; }
+
+.xfer-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  transition: background .12s;
+}
+.xfer-row:last-child { border-bottom: none; }
+.xfer-row:hover { background: rgba(255,255,255,.02); }
+
+.xfer-club-link {
+  flex-shrink: 0; display: block;
+  width: 28px; height: 28px;
+  transition: transform .15s;
+}
+.xfer-club-link:hover { transform: scale(1.15); }
+.xfer-club-logo {
+  width: 28px; height: 28px; object-fit: contain;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.4));
+  border-radius: 4px;
+}
+.xfer-info { flex: 1; min-width: 0; }
+.xfer-name {
+  font-weight: 600; font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.xfer-club-name {
+  font-size: 10px; color: var(--dim); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.xfer-meta {
+  flex-shrink: 0; text-align: right;
+}
+.xfer-fee {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+}
+.xfer-fee-transfer { color: var(--gold); }
+.xfer-fee-loan { color: #7ab4f0; }
+.xfer-fee-free { color: var(--green); }
+.xfer-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; color: var(--dim); margin-top: 1px;
+}
+.xfer-empty {
+  padding: 20px; text-align: center;
+  font-size: 11px; color: var(--dim);
+}
 
 /* ── Back link ────────────────────────────────────────────────────────── */
 .back-link {
@@ -169,8 +220,8 @@
   .player-data .pd-hide { display: none; }
   .roster-strip { flex-wrap: wrap; }
   .rs-cell { flex: 1 1 25%; min-width: 70px; }
-  .transfer-row { font-size: 11px; gap: 6px; }
-  .xfer-club { max-width: 100px; }
+  .xfer-grid { grid-template-columns: 1fr; }
+  .xfer-row { padding: 8px 10px; gap: 8px; }
 }
 </style>
 </head>
@@ -216,13 +267,57 @@ function posGroup(pos) {
 const POS_ORDER = { GK: 0, DF: 1, MF: 2, FW: 3 };
 const POS_LABEL = { GK: 'Goalkeepers', DF: 'Defenders', MF: 'Midfielders', FW: 'Forwards' };
 
+function fmtFee(t) {
+  if (t.fee_eur) {
+    const cls = 'xfer-fee-transfer';
+    return `<div class="xfer-fee ${cls}">${t.fee_eur >= 1e6 ? '\u20AC'+(t.fee_eur/1e6).toFixed(1)+'M' : '\u20AC'+(t.fee_eur/1e3).toFixed(0)+'K'}</div>`;
+  }
+  const cls = t.type === 'loan' ? 'xfer-fee-loan' : t.type === 'free' ? 'xfer-fee-free' : '';
+  const label = t.type === 'loan' ? 'Loan' : t.type === 'free' ? 'Free' : t.type || '';
+  return `<div class="xfer-fee ${cls}">${label}</div>`;
+}
+
+function renderXferPanel(list, dir, clubId) {
+  const label = dir === 'in' ? 'Players In' : 'Players Out';
+  let html = `<div class="xfer-panel xfer-panel-${dir}">
+    <div class="xfer-panel-hdr">${label} <span class="xfer-cnt">${list.length}</span></div>`;
+
+  if (!list.length) {
+    html += `<div class="xfer-empty">No ${dir === 'in' ? 'arrivals' : 'departures'}</div>`;
+  } else {
+    html += list.map(t => {
+      const other = dir === 'in' ? t.from : t.to;
+      const otherName = other?.name || 'Unknown';
+      const otherLogo = other?.logo_url || '';
+      const otherId = other?.id;
+      const logoHtml = otherLogo
+        ? `<a href="${otherId ? 'club.html?id='+otherId : '#'}" class="xfer-club-link" title="${otherName}"><img class="xfer-club-logo" src="${otherLogo}" alt="${otherName}" loading="lazy" onerror="this.parentElement.style.display='none'"></a>`
+        : '';
+      return `<div class="xfer-row">
+        ${logoHtml}
+        <div class="xfer-info">
+          <div class="xfer-name">${t.players?.name || '?'}</div>
+          <div class="xfer-club-name">${dir === 'in' ? 'from' : 'to'} ${otherName}</div>
+        </div>
+        <div class="xfer-meta">
+          ${fmtFee(t)}
+          <div class="xfer-date">${t.transfer_date || ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  html += '</div>';
+  return html;
+}
+
 async function loadClub(id) {
   const status = document.getElementById('status');
   try {
     const [clubs, players, transfers] = await Promise.all([
       sb(`club_teams?select=*&id=eq.${id}`),
       sb(`players?select=id,name,short_name,primary_position,date_of_birth,height_cm,weight_kg,image_url,espn_id,national_teams:nationality_id(name,flag_emoji)&current_club_id=eq.${id}&order=name`),
-      sb(`transfers?select=*,players!transfers_player_id_fkey(name),from:club_teams!transfers_from_club_id_fkey(name),to:club_teams!transfers_to_club_id_fkey(name)&or=(from_club_id.eq.${id},to_club_id.eq.${id})&order=transfer_date.desc.nullslast&limit=50`),
+      sb(`transfers?select=*,players!transfers_player_id_fkey(name,image_url),from:club_teams!transfers_from_club_id_fkey(id,name,logo_url),to:club_teams!transfers_to_club_id_fkey(id,name,logo_url)&or=(from_club_id.eq.${id},to_club_id.eq.${id})&order=transfer_date.desc.nullslast&limit=50`),
     ]);
 
     if (!clubs.length) { status.textContent = 'Club not found.'; return; }
@@ -320,22 +415,16 @@ async function loadClub(id) {
       html += '</div>';
     }
 
-    // Transfers
-    if (transfers.length) {
-      html += `<div class="section-title">Recent Transfers</div>`;
-      html += transfers.map(t => {
-        const isIn = String(t.to_club_id) === String(id);
-        const otherClub = isIn ? (t.from?.name || 'Unknown') : (t.to?.name || 'Unknown');
-        const fee = t.fee_eur ? (t.fee_eur >= 1e6 ? `\u20AC${(t.fee_eur/1e6).toFixed(1)}M` : `\u20AC${(t.fee_eur/1e3).toFixed(0)}K`) : '';
-        const typeClass = t.type === 'loan' ? 'xfer-type-loan' : t.type === 'free' ? 'xfer-type-free' : '';
-        return `<div class="transfer-row">
-          <span class="xfer-dir ${isIn ? 'xfer-in' : 'xfer-out'}">${isIn ? 'IN' : 'OUT'}</span>
-          <span class="xfer-name">${t.players?.name || '?'}</span>
-          <span class="xfer-club">${isIn ? 'from ' : 'to '}${otherClub}</span>
-          <span class="xfer-fee ${typeClass}">${fee || t.type || ''}</span>
-          <span class="xfer-date">${t.transfer_date || ''}</span>
-        </div>`;
-      }).join('');
+    // Transfers — split into IN / OUT panels
+    const xferIn = transfers.filter(t => String(t.to_club_id) === String(id));
+    const xferOut = transfers.filter(t => String(t.from_club_id) === String(id));
+
+    if (xferIn.length || xferOut.length) {
+      html += `<div class="section-title">Transfers</div>`;
+      html += `<div class="xfer-grid">`;
+      html += renderXferPanel(xferIn, 'in', id);
+      html += renderXferPanel(xferOut, 'out', id);
+      html += `</div>`;
     }
 
     document.getElementById('content').innerHTML = html;
