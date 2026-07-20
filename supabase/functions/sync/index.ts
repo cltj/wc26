@@ -725,7 +725,7 @@ Deno.serve(async (req) => {
         // Update team formations/starting XI/substitutes in teams_helper
         for (const lu of matchData.teamLineups) {
           // Look up team_id from teams table
-          const { data: teamRow } = await supabase.from('teams').select('id').eq('name', lu.team).single()
+          const { data: teamRow } = await supabase.from('national_teams').select('id').eq('name', lu.team).single()
           if (teamRow) {
             await supabase.from('teams_helper').update({
               last_formation: lu.formation,
@@ -924,12 +924,12 @@ Deno.serve(async (req) => {
       if (allPredGames) allPredGames.forEach(g => gameById[g.id] = g)
 
       // Also get group standings for R32 resolution
-      // Join teams_helper with teams to get name + group_letter
+      // Join teams_helper with national_teams to get name + group_letter
       const { data: ttRows } = await supabase.from('teams_helper')
-        .select('group_letter,teams(name)')
+        .select('group_letter,national_teams(name)')
         .eq('tournament', 'WC 2026')
         .order('group_letter')
-      const teams = (ttRows || []).map((r: any) => ({ name: r.teams.name, group_letter: r.group_letter }))
+      const teams = (ttRows || []).map((r: any) => ({ name: r.national_teams.name, group_letter: r.group_letter }))
       const { data: sched } = await supabase.from('schedule').select('home_team,away_team,home_score,away_score,status,group_name').order('id')
 
       let slotUpdates = 0

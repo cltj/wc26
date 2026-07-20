@@ -73,14 +73,14 @@ async function verifyPin(name, pin) {
 }
 
 // ── Tournament teams helper ──────────────────────────────────────────────────
-// Fetches teams_helper joined with teams, returns flat array like the old teams table
+// Fetches teams_helper joined with national_teams, returns flat array
 async function loadTournamentTeams(tournament = 'WC 2026') {
-  const rows = await sb(`teams_helper?select=team_id,group_letter,eliminated,last_formation,last_starting_xi,last_substitutes,teams(id,name,flag_emoji,confederation)&tournament=eq.${encodeURIComponent(tournament)}&order=group_letter`);
+  const rows = await sb(`teams_helper?select=team_id,group_letter,eliminated,last_formation,last_starting_xi,last_substitutes,national_teams(id,name,flag_emoji,confederation)&tournament=eq.${encodeURIComponent(tournament)}&order=group_letter`);
   return rows.map(r => ({
-    id: r.teams.id,
-    name: r.teams.name,
-    flag_emoji: r.teams.flag_emoji,
-    confederation: r.teams.confederation,
+    id: r.national_teams.id,
+    name: r.national_teams.name,
+    flag_emoji: r.national_teams.flag_emoji,
+    confederation: r.national_teams.confederation,
     group_letter: r.group_letter,
     eliminated: r.eliminated,
     last_formation: r.last_formation,
