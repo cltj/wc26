@@ -322,8 +322,9 @@ function renderXferPanel(list, dir, clubId) {
       const otherName = other?.name || 'Unknown';
       const otherLogo = other?.logo_url || '';
       const otherId = other?.id;
+      const seasonLink = seasonParam ? `&season=${seasonParam}` : '';
       const logoHtml = otherLogo
-        ? `<a href="${otherId ? 'club.html?id='+otherId : '#'}" class="xfer-club-link" title="${otherName}"><img class="xfer-club-logo" src="${otherLogo}" alt="${otherName}" loading="lazy" onerror="this.parentElement.style.display='none'"></a>`
+        ? `<a href="${otherId ? 'club.html?id='+otherId+seasonLink : '#'}" class="xfer-club-link" title="${otherName}"><img class="xfer-club-logo" src="${otherLogo}" alt="${otherName}" loading="lazy" onerror="this.parentElement.style.display='none'"></a>`
         : '';
       return `<div class="xfer-row">
         ${logoHtml}

@@ -144,6 +144,9 @@
     <select id="league-select" onchange="onLeagueChange()">
       <option value="">Select a league...</option>
     </select>
+    <select id="season-select" onchange="renderClubs()" style="display:none">
+      <option value="">All seasons</option>
+    </select>
     <input type="text" class="search-box" id="search" placeholder="Search clubs..." oninput="renderClubs()">
     <div class="league-info" id="league-info"></div>
   </div>
@@ -159,22 +162,23 @@ injectNav('data');
 
 let allLeagues = [];
 let allClubs = [];
+let allSeasons = [];
 let playerCounts = {};
 let activeCategory = '';
 
 async function init() {
   try {
-    // Load leagues, clubs, and player counts in parallel
-    const [leagues, clubs, players] = await Promise.all([
+    const [leagues, clubs, players, seasons] = await Promise.all([
       sb('leagues?select=id,espn_code,name,category&order=category,name'),
       sb('club_teams?select=id,name,short_name,league_espn_code,logo_url,color,espn_team_id&order=name'),
       sb('players?select=current_club_id&current_club_id=not.is.null'),
+      sb('seasons?select=id,league_id,label,start_date,is_current&order=start_date.desc'),
     ]);
 
     allLeagues = leagues;
     allClubs = clubs;
+    allSeasons = seasons;
 
-    // Count players per club
     players.forEach(p => {
       playerCounts[p.current_club_id] = (playerCounts[p.current_club_id] || 0) + 1;
     });
@@ -231,7 +235,35 @@ function populateLeagues() {
 
 function onLeagueChange() {
   document.getElementById('search').value = '';
+  populateSeasons();
   renderClubs();
+}
+
+function populateSeasons() {
+  const code = document.getElementById('league-select').value;
+  const sel = document.getElementById('season-select');
+
+  if (!code) {
+    sel.style.display = 'none';
+    sel.innerHTML = '<option value="">All seasons</option>';
+    return;
+  }
+
+  const league = allLeagues.find(l => l.espn_code === code);
+  if (!league) { sel.style.display = 'none'; return; }
+
+  const leagueSeasons = allSeasons.filter(s => s.league_id === league.id);
+  if (!leagueSeasons.length) { sel.style.display = 'none'; return; }
+
+  // Default to current or latest
+  const current = leagueSeasons.find(s => s.is_current) || leagueSeasons[0];
+
+  sel.innerHTML = leagueSeasons.map(s => {
+    const val = s.start_date ? s.start_date.slice(0, 4) : s.label;
+    const selected = s.id === current.id ? 'selected' : '';
+    return `<option value="${val}" ${selected}>${s.label}${s.is_current ? ' *' : ''}</option>`;
+  }).join('');
+  sel.style.display = '';
 }
 
 function renderClubs() {
@@ -263,11 +295,14 @@ function renderClubs() {
   const totalPlayers = clubs.reduce((s, c) => s + (playerCounts[c.id] || 0), 0);
   info.innerHTML = `<span class="val">${clubs.length}</span> clubs <span class="val">${totalPlayers}</span> players`;
 
+  const seasonVal = document.getElementById('season-select').value;
+  const seasonQ = seasonVal ? `&season=${seasonVal}` : '';
+
   grid.innerHTML = clubs.map((c, i) => {
     const count = playerCounts[c.id] || 0;
     const color = c.color && c.color !== '000000' ? '#' + c.color : '';
     const style = color ? `style="--club-color:${color}; animation-delay:${Math.min(i * 20, 400)}ms"` : `style="animation-delay:${Math.min(i * 20, 400)}ms"`;
-    return `<a href="club.html?id=${c.id}" class="club-card" ${style}>
+    return `<a href="club.html?id=${c.id}${seasonQ}" class="club-card" ${style}>
       <img class="club-logo" src="${c.logo_url || ''}" alt="" loading="lazy" onerror="this.style.display='none'">
       <div class="club-info">
         <div class="club-name">${c.name}</div>
