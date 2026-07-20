@@ -635,9 +635,9 @@ Deno.serve(async (req) => {
     l(`New finished games to process: ${newFinished.length}`)
 
     if (newFinished.length > 0) {
-      // Load all WC squad players for matching (via squad_players → players)
+      // Load all WC squad players for matching (via national_squads → players)
       const { data: squadRows } = await supabase
-        .from('squad_players')
+        .from('national_squads')
         .select('player_id,national_team_id,players!inner(id,name,short_name,espn_id),national_teams:national_team_id(name)')
         .eq('league_code', 'FIFA.WORLD')
 

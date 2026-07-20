@@ -83,9 +83,9 @@ let allPlayers=[], allTeamsData=[], sortCol='name', sortAsc=true;
 async function loadAll() {
   const status = document.getElementById('p-status');
   try {
-    // Load squad_players joined with players, national_teams, club_teams
+    // Load national_squads joined with players, national_teams, club_teams
     const squad = await sb(
-      `squad_players?select=position,` +
+      `national_squads?select=position,` +
       `players!inner(id,name,espn_id,primary_position,image_url,` +
         `national_teams:nationality_id(name,flag_emoji),` +
         `club_teams:current_club_id(name))` +

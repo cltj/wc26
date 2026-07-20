@@ -295,7 +295,7 @@ async function loadTeam(name) {
   const content = document.getElementById('team-content');
 
   try {
-    // Fetch team, squad (via squad_players), schedule, stats, and player_matches
+    // Fetch team, squad (via national_squads), schedule, stats, and player_matches
     const natTeamP = sb(`national_teams?select=id&name=eq.${encodeURIComponent(name)}`);
 
     const [teams, schedule, statsAll, natTeamRows] = await Promise.all([
@@ -309,9 +309,9 @@ async function loadTeam(name) {
     const statsById = {};
     statsAll.forEach(s => statsById[s.player_id] = s);
 
-    // Load squad for this team via squad_players join
+    // Load squad for this team via national_squads join
     const squadRaw = natTeamId
-      ? await sb(`squad_players?select=position,players!inner(id,name,first_name,last_name,short_name,date_of_birth,primary_position,image_url,nationality_id,club_teams:current_club_id(name))&league_code=eq.FIFA.WORLD&national_team_id=eq.${natTeamId}&order=players(name)`)
+      ? await sb(`national_squads?select=position,players!inner(id,name,first_name,last_name,short_name,date_of_birth,primary_position,image_url,nationality_id,club_teams:current_club_id(name))&league_code=eq.FIFA.WORLD&national_team_id=eq.${natTeamId}&order=players(name)`)
       : [];
 
     // Flatten squad into player objects matching old format
@@ -337,9 +337,9 @@ async function loadTeam(name) {
       };
     });
 
-    // All players for tournament ranking (via squad_players + stats)
+    // All players for tournament ranking (via national_squads + stats)
     const allSquadRaw = await sb(
-      `squad_players?select=players!inner(id,name),national_teams:national_team_id(name)&league_code=eq.FIFA.WORLD`
+      `national_squads?select=players!inner(id,name),national_teams:national_team_id(name)&league_code=eq.FIFA.WORLD`
     );
     const allPlayers = allSquadRaw.map(sq => {
       const s = statsById[sq.players.id] || {};
