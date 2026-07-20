@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-ESPN Transfer Collection Pipeline
+ESPN Transfer Collection Pipeline (per-club)
 
-Scrapes transfer data from ESPN's transfers page and upserts into Supabase.
-Links transfers to players and clubs via ESPN IDs.
+Scrapes transfer data from ESPN's per-club transfer pages.
+More reliable than league-wide pages — direction (in/out) is explicit.
 
 Usage:
   python3 scripts/collect_transfers.py --league eng.1 --season 2025
   python3 scripts/collect_transfers.py --league eng.1 --season 2025 --dry-run
-  python3 scripts/collect_transfers.py --all-leagues --season 2025
+  python3 scripts/collect_transfers.py --season 2025                # all leagues
   python3 scripts/collect_transfers.py --league eng.1 --from-season 2020 --to-season 2025
+  python3 scripts/collect_transfers.py --limit 10 --season 2025     # first 10 clubs
 """
 
 import argparse
 import json
 import re
-import sys
 import time
 import urllib.request
 import urllib.error
@@ -24,16 +24,9 @@ from datetime import datetime, timezone
 SB_URL = 'https://hsanauyxexbyefmefhcd.supabase.co'
 SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzYW5hdXl4ZXhieWVmbWVmaGNkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTY4MDY2MSwiZXhwIjoyMDk3MjU2NjYxfQ.F0PPYAgFDk_EXjJcXfJFK5CXmGLHrCICkrwG9DFihM4'
 
-REQUEST_DELAY = 1.5  # be nice to ESPN
+REQUEST_DELAY = 1.5
 
-# Leagues that have transfer pages on ESPN (domestic leagues only)
-TRANSFER_LEAGUES = [
-    'ENG.1', 'ENG.2', 'ESP.1', 'ESP.2', 'GER.1', 'GER.2',
-    'ITA.1', 'ITA.2', 'FRA.1', 'FRA.2', 'NED.1', 'POR.1',
-    'BEL.1', 'TUR.1', 'AUT.1', 'GRE.1', 'SCO.1',
-    'USA.1', 'MEX.1', 'BRA.1', 'ARG.1',
-    'KSA.1', 'AUS.1',
-]
+FEE_MAP = {'Free': 'free', 'Loan': 'loan', 'Undisclosed': 'transfer', 'Swap': 'transfer'}
 
 # ── Supabase helpers ──────────────────────────────────────────────────────────
 
@@ -44,153 +37,112 @@ def sb_get(path):
     )
     return json.loads(urllib.request.urlopen(req).read())
 
-def sb_upsert(table, data, on_conflict=None):
+def sb_post(table, data):
     url = f'{SB_URL}/rest/v1/{table}'
     headers = {
-        'apikey': SB_KEY,
-        'Authorization': f'Bearer {SB_KEY}',
-        'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates,return=representation',
+        'apikey': SB_KEY, 'Authorization': f'Bearer {SB_KEY}',
+        'Content-Type': 'application/json', 'Prefer': 'return=representation',
     }
-    if on_conflict:
-        url += f'?on_conflict={on_conflict}'
     req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=headers, method='POST')
     return json.loads(urllib.request.urlopen(req).read())
 
-# ── ESPN scraper ──────────────────────────────────────────────────────────────
-
-FEE_MAP = {
-    'Free': 'free',
-    'Loan': 'loan',
-    'Undisclosed': 'transfer',
-    'Swap': 'transfer',
-}
+# ── Parsing helpers ───────────────────────────────────────────────────────────
 
 def parse_fee(fee_str):
-    """Parse ESPN fee string into (type, fee_eur)."""
     fee_str = fee_str.strip()
     if fee_str in FEE_MAP:
         return FEE_MAP[fee_str], None
-
-    # Parse amounts like "€ 20M", "€3.5M", "£15M", "$8M"
     m = re.match(r'[€£$]\s*([\d.]+)\s*M', fee_str)
     if m:
-        amount = float(m.group(1)) * 1_000_000
-        return 'transfer', amount
-
+        return 'transfer', float(m.group(1)) * 1_000_000
     m = re.match(r'[€£$]\s*([\d,.]+)\s*K', fee_str)
     if m:
-        amount = float(m.group(1).replace(',', '')) * 1_000
-        return 'transfer', amount
-
+        return 'transfer', float(m.group(1).replace(',', '')) * 1_000
     return 'transfer', None
 
-def parse_transfer_date(date_str, season_year):
-    """Convert 'Sep 1' to a full date using the season year context."""
+def parse_date(date_str, season_year):
     try:
         month_str, day_str = date_str.strip().split(' ', 1)
-        month_map = {
-            'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
-            'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
-        }
-        month = month_map.get(month_str)
-        day = int(day_str)
+        months = {'Jan':1,'Feb':2,'Mar':3,'Apr':4,'May':5,'Jun':6,
+                  'Jul':7,'Aug':8,'Sep':9,'Oct':10,'Nov':11,'Dec':12}
+        month = months.get(month_str)
         if not month:
             return None
-        # For cross-year seasons: Jul-Dec = season_year, Jan-Jun = season_year+1
+        day = int(day_str)
         year = season_year if month >= 7 else season_year + 1
         return f'{year}-{month:02d}-{day:02d}'
     except Exception:
         return None
 
-def scrape_transfers(league, season_year):
-    """Scrape all transfer pages for a league/season."""
-    transfers = []
-    page = 1
+# ── Per-club scraper ──────────────────────────────────────────────────────────
 
-    while True:
-        url = f'https://www.espn.com/soccer/transfers/_/league/{league}/season/{season_year}/page/{page}'
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+def scrape_club_transfers(espn_team_id, season_year):
+    """Scrape transfers for one club. Returns list of (direction, transfer) tuples."""
+    url = f'https://www.espn.com/soccer/team/transfers/_/id/{espn_team_id}/year/{season_year}'
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
 
-        try:
-            resp = urllib.request.urlopen(req)
-            html = resp.read().decode('utf-8', errors='replace')
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                break
-            raise
+    try:
+        resp = urllib.request.urlopen(req)
+        html = resp.read().decode('utf-8', errors='replace')
+    except urllib.error.HTTPError:
+        return []
 
-        tbody_matches = re.findall(r'<tbody[^>]*>(.*?)</tbody>', html, re.DOTALL)
-        if not tbody_matches:
-            break
+    # Find table headers to determine direction
+    theads = re.findall(r'<thead[^>]*>(.*?)</thead>', html, re.DOTALL)
+    tbodies = re.findall(r'<tbody[^>]*>(.*?)</tbody>', html, re.DOTALL)
 
-        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', tbody_matches[0], re.DOTALL)
-        if not rows:
-            break
+    results = []
+    for i, (thead, tbody) in enumerate(zip(theads, tbodies)):
+        thead_text = re.sub(r'<[^>]+>', ' ', thead).upper()
+        direction = 'in' if 'FROM' in thead_text else 'out'
 
+        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', tbody, re.DOTALL)
         for row in rows:
             cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
-            if len(cells) < 6:
+            if len(cells) < 4:
                 continue
 
             date_text = re.sub(r'<[^>]+>', '', cells[0]).strip()
-
-            # Player
             player_match = re.search(r'/soccer/player/_/id/(\d+)', cells[1])
             player_name = re.sub(r'<[^>]+>', ' ', cells[1]).strip()
             player_name = re.sub(r'\s+', ' ', player_name)
             player_espn_id = player_match.group(1) if player_match else None
 
-            # From team (cell 2) — links use /soccer/club/_/id/ or /soccer/team/_/id/
-            from_match = re.search(r'/soccer/(?:club|team)/_/id/(\d+)', cells[2])
-            from_text = re.sub(r'<[^>]+>', ' ', cells[2]).strip()
-            from_text = re.sub(r'\s+', ' ', from_text)
-            from_name = re.sub(r'^[A-Z]{2,4}\s+', '', from_text).strip() if 'No team' not in from_text else None
-            from_espn_id = from_match.group(1) if from_match else None
+            other_match = re.search(r'/soccer/(?:club|team)/_/id/(\d+)', cells[2])
+            other_espn_id = other_match.group(1) if other_match else None
+            other_name = re.sub(r'<[^>]+>', ' ', cells[2]).strip()
+            other_name = re.sub(r'\s+', ' ', other_name)
+            other_name = re.sub(r'^[A-Z]{2,5}\s+', '', other_name).strip()
 
-            # To team (cell 4, cell 3 is arrow)
-            to_match = re.search(r'/soccer/(?:club|team)/_/id/(\d+)', cells[4])
-            to_text = re.sub(r'<[^>]+>', ' ', cells[4]).strip()
-            to_text = re.sub(r'\s+', ' ', to_text)
-            to_name = re.sub(r'^[A-Z]{2,4}\s+', '', to_text).strip() if 'No team' not in to_text else None
-            to_espn_id = to_match.group(1) if to_match else None
-
-            # Fee
-            fee_text = re.sub(r'<[^>]+>', '', cells[5]).strip()
+            fee_text = re.sub(r'<[^>]+>', '', cells[3]).strip()
             transfer_type, fee_eur = parse_fee(fee_text)
+            transfer_date = parse_date(date_text, season_year)
 
-            transfer_date = parse_transfer_date(date_text, season_year)
-
-            transfers.append({
-                'date': transfer_date,
-                'date_text': date_text,
+            results.append({
+                'direction': direction,
                 'player_name': player_name,
                 'player_espn_id': player_espn_id,
-                'from_name': from_name,
-                'from_espn_id': from_espn_id,
-                'to_name': to_name,
-                'to_espn_id': to_espn_id,
+                'other_club_espn_id': other_espn_id,
+                'other_club_name': other_name,
+                'date': transfer_date,
+                'date_text': date_text,
                 'type': transfer_type,
                 'fee_text': fee_text,
                 'fee_eur': fee_eur,
             })
 
-        page += 1
-        time.sleep(REQUEST_DELAY)
-
-    return transfers
+    return results
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def collect(args):
     now = datetime.now(timezone.utc)
-    leagues_to_process = TRANSFER_LEAGUES if args.all_leagues else [args.league.upper()]
     from_season = args.from_season or args.season
     to_season = args.to_season or args.season
 
     print('Loading reference data...')
 
-    # Player index: espn_id → player row id
+    # Player index
     players_idx = {}
     offset = 0
     while True:
@@ -202,95 +154,127 @@ def collect(args):
         offset += 1000
     print(f'  {len(players_idx)} players indexed')
 
-    # Club index: espn_team_id → club row id
-    clubs = sb_get('club_teams?select=id,espn_team_id')
-    clubs_idx = {c['espn_team_id']: c['id'] for c in clubs}
+    # Club index
+    clubs_raw = sb_get('club_teams?select=id,espn_team_id,name,league_espn_code')
+    clubs_idx = {c['espn_team_id']: c['id'] for c in clubs_raw}
     print(f'  {len(clubs_idx)} clubs indexed')
 
-    # Season index: (league_id, start_year) → season row id
+    # Season index
     seasons = sb_get('seasons?select=id,league_id,start_date')
     season_idx = {}
     for s in seasons:
         if s.get('start_date'):
-            yr = int(s['start_date'][:4])
-            season_idx[(s['league_id'], yr)] = s['id']
+            season_idx[(s['league_id'], int(s['start_date'][:4]))] = s['id']
 
     leagues_db = sb_get('leagues?select=id,espn_code')
     league_id_by_code = {l['espn_code']: l['id'] for l in leagues_db}
 
-    total_stats = {'scraped': 0, 'matched': 0, 'unmatched_player': 0, 'inserted': 0, 'errors': 0}
+    # Filter clubs
+    clubs = clubs_raw
+    if args.league:
+        code = args.league.upper()
+        clubs = [c for c in clubs if c['league_espn_code'] == code]
+    if args.limit:
+        clubs = clubs[:args.limit]
 
-    for league in leagues_to_process:
-        for season_year in range(from_season, to_season + 1):
-            print(f'\n{"="*60}')
-            print(f'{league} season {season_year}')
-            print(f'{"="*60}')
+    print(f'Processing {len(clubs)} clubs x {to_season - from_season + 1} season(s)')
 
-            transfers = scrape_transfers(league, season_year)
-            print(f'  Scraped {len(transfers)} transfers')
-            total_stats['scraped'] += len(transfers)
+    stats = {'clubs': 0, 'scraped': 0, 'inserted': 0, 'unmatched': 0, 'errors': 0, 'skipped': 0}
 
-            if not transfers or args.dry_run:
-                if args.dry_run and transfers:
-                    for t in transfers[:5]:
-                        print(f'  {t["date_text"]:8} {t["player_name"]:25} -> {t["to_name"] or "free agent":20} ({t["type"]}, {t["fee_text"]})')
-                    if len(transfers) > 5:
-                        print(f'  ... and {len(transfers)-5} more')
-                continue
+    for season_year in range(from_season, to_season + 1):
+        print(f'\n--- Season {season_year} ---')
 
-            # Resolve ESPN IDs to our DB IDs and build insert batch
-            league_id = league_id_by_code.get(league)
-            season_id = season_idx.get((league_id, season_year)) if league_id else None
+        for i, club in enumerate(clubs):
+            espn_id = club['espn_team_id']
+            league = club['league_espn_code']
+            club_id = club['id']
 
-            batch = []
-            for t in transfers:
-                player_id = players_idx.get(t['player_espn_id']) if t['player_espn_id'] else None
-                from_club_id = clubs_idx.get(t['from_espn_id']) if t['from_espn_id'] else None
-                to_club_id = clubs_idx.get(t['to_espn_id']) if t['to_espn_id'] else None
+            print(f'[{i+1}/{len(clubs)}] {club["name"]}...', end=' ', flush=True)
 
-                if not player_id:
-                    total_stats['unmatched_player'] += 1
+            try:
+                transfers = scrape_club_transfers(espn_id, season_year)
+
+                if not transfers:
+                    print('0 transfers')
+                    stats['skipped'] += 1
+                    time.sleep(REQUEST_DELAY)
                     continue
 
-                total_stats['matched'] += 1
-                batch.append({
-                    'player_id': player_id,
-                    'from_club_id': from_club_id,
-                    'to_club_id': to_club_id,
-                    'detected_at': now.isoformat(),
-                    'transfer_date': t['date'],
-                    'season_id': season_id,
-                    'type': t['type'],
-                    'fee_eur': t['fee_eur'],
-                    'notes': f'{t["player_name"]}: {t["from_name"] or "free"} -> {t["to_name"] or "free"} ({t["fee_text"]})',
-                })
+                stats['scraped'] += len(transfers)
 
-            if batch:
-                try:
-                    sb_upsert('transfers', batch)
-                    total_stats['inserted'] += len(batch)
-                    print(f'  Inserted {len(batch)} transfers ({total_stats["unmatched_player"]} unmatched players)')
-                except urllib.error.HTTPError as e:
-                    body = e.read().decode()[:300]
-                    print(f'  ERROR inserting: {e.code} {body}')
-                    total_stats['errors'] += 1
+                if args.dry_run:
+                    ins = sum(1 for t in transfers if t['direction'] == 'in')
+                    outs = sum(1 for t in transfers if t['direction'] == 'out')
+                    print(f'{ins} in, {outs} out')
+                    for t in transfers[:3]:
+                        arrow = '<-' if t['direction'] == 'in' else '->'
+                        print(f'  {t["date_text"]:8} {t["player_name"]:25} {arrow} {t["other_club_name"]:20} ({t["type"]}, {t["fee_text"]})')
+                    if len(transfers) > 3:
+                        print(f'  ... +{len(transfers)-3} more')
+                    time.sleep(REQUEST_DELAY)
+                    continue
+
+                league_id = league_id_by_code.get(league)
+                season_id = season_idx.get((league_id, season_year)) if league_id else None
+
+                batch = []
+                for t in transfers:
+                    player_id = players_idx.get(t['player_espn_id']) if t['player_espn_id'] else None
+                    other_club_id = clubs_idx.get(t['other_club_espn_id']) if t['other_club_espn_id'] else None
+
+                    if not player_id:
+                        stats['unmatched'] += 1
+                        continue
+
+                    if t['direction'] == 'in':
+                        from_id, to_id = other_club_id, club_id
+                    else:
+                        from_id, to_id = club_id, other_club_id
+
+                    batch.append({
+                        'player_id': player_id,
+                        'from_club_id': from_id,
+                        'to_club_id': to_id,
+                        'detected_at': now.isoformat(),
+                        'transfer_date': t['date'],
+                        'season_id': season_id,
+                        'type': t['type'],
+                        'fee_eur': t['fee_eur'],
+                        'notes': f'{t["player_name"]}: {t["other_club_name"]} ({t["fee_text"]})',
+                    })
+
+                if batch:
+                    sb_post('transfers', batch)
+                    stats['inserted'] += len(batch)
+
+                ins = sum(1 for t in transfers if t['direction'] == 'in')
+                outs = sum(1 for t in transfers if t['direction'] == 'out')
+                matched = len(batch)
+                unmatched = len(transfers) - matched
+                print(f'{ins} in, {outs} out ({matched} matched, {unmatched} unmatched)')
+                stats['clubs'] += 1
+
+            except urllib.error.HTTPError as e:
+                print(f'ERROR {e.code}')
+                stats['errors'] += 1
+            except Exception as e:
+                print(f'ERROR: {e}')
+                stats['errors'] += 1
+
+            time.sleep(REQUEST_DELAY)
 
     print(f'\n{"="*60}')
-    print(f'Total: {total_stats["scraped"]} scraped, {total_stats["matched"]} matched, '
-          f'{total_stats["unmatched_player"]} unmatched players, '
-          f'{total_stats["inserted"]} inserted, {total_stats["errors"]} errors')
+    print(f'Done: {stats["clubs"]} clubs, {stats["scraped"]} scraped, '
+          f'{stats["inserted"]} inserted, {stats["unmatched"]} unmatched, '
+          f'{stats["errors"]} errors')
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Collect transfer data from ESPN')
-    parser.add_argument('--league', help='League code (e.g. eng.1)')
-    parser.add_argument('--season', type=int, required=True, help='ESPN season year (e.g. 2025 for 2025-26)')
-    parser.add_argument('--from-season', type=int, help='Start season year for range (default: same as --season)')
-    parser.add_argument('--to-season', type=int, help='End season year for range (default: same as --season)')
-    parser.add_argument('--all-leagues', action='store_true', help='Process all known leagues')
-    parser.add_argument('--dry-run', action='store_true', help='Scrape and show transfers without inserting')
+    parser = argparse.ArgumentParser(description='Collect transfer data from ESPN (per-club)')
+    parser.add_argument('--league', help='League code (e.g. eng.1). Omit for all leagues.')
+    parser.add_argument('--season', type=int, required=True, help='ESPN season year (e.g. 2025)')
+    parser.add_argument('--from-season', type=int, help='Start of season range')
+    parser.add_argument('--to-season', type=int, help='End of season range')
+    parser.add_argument('--limit', type=int, help='Max clubs to process')
+    parser.add_argument('--dry-run', action='store_true', help='Scrape without inserting')
     args = parser.parse_args()
-
-    if not args.league and not args.all_leagues:
-        parser.error('Either --league or --all-leagues is required')
-
     collect(args)
