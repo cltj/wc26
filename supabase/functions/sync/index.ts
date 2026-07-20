@@ -722,12 +722,12 @@ Deno.serve(async (req) => {
         l(`  Processing ${homeTeam} vs ${awayTeam} (ESPN ${espnId})...`)
         const matchData = await espnMatchData(espnId)
 
-        // Update team formations/starting XI/substitutes in tournament_teams
+        // Update team formations/starting XI/substitutes in teams_helper
         for (const lu of matchData.teamLineups) {
           // Look up team_id from teams table
           const { data: teamRow } = await supabase.from('teams').select('id').eq('name', lu.team).single()
           if (teamRow) {
-            await supabase.from('tournament_teams').update({
+            await supabase.from('teams_helper').update({
               last_formation: lu.formation,
               last_starting_xi: lu.starters,
               last_substitutes: lu.substitutes,
@@ -924,8 +924,8 @@ Deno.serve(async (req) => {
       if (allPredGames) allPredGames.forEach(g => gameById[g.id] = g)
 
       // Also get group standings for R32 resolution
-      // Join tournament_teams with teams to get name + group_letter
-      const { data: ttRows } = await supabase.from('tournament_teams')
+      // Join teams_helper with teams to get name + group_letter
+      const { data: ttRows } = await supabase.from('teams_helper')
         .select('group_letter,teams(name)')
         .eq('tournament', 'WC 2026')
         .order('group_letter')
