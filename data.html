@@ -128,6 +128,36 @@
 .q-warn { background: rgba(240,180,41,.1); color: var(--gold); }
 .q-err { background: rgba(224,52,52,.1); color: #e07070; }
 
+/* ── Breadcrumb ───────────────────────────────────────────────────────── */
+.breadcrumb {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin-bottom: 14px; font-size: 11px; min-height: 0;
+}
+.breadcrumb:empty { display: none; }
+.bc-item {
+  color: var(--dim); cursor: pointer; transition: color .15s;
+  font-weight: 600;
+}
+.bc-item:hover { color: var(--gold); }
+.bc-sep { color: rgba(255,255,255,.15); }
+.bc-current { color: var(--white); cursor: default; }
+.bc-clear {
+  margin-left: 8px; font-size: 10px; color: var(--dim);
+  cursor: pointer; padding: 2px 8px; border: 1px solid var(--border);
+  border-radius: 3px; transition: all .15s;
+}
+.bc-clear:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ── Clickable rows ───────────────────────────────────────────────────── */
+.dgrid tr.clickable { cursor: pointer; }
+.dgrid tr.clickable:hover td { background: rgba(240,180,41,.04); }
+.dgrid tr.clickable td:first-child { position: relative; }
+.dgrid tr.clickable td:first-child::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px; background: var(--gold); opacity: 0; transition: opacity .15s;
+}
+.dgrid tr.clickable:hover td:first-child::before { opacity: 1; }
+
 @media (max-width: 680px) {
   .tab { padding: 8px 10px; font-size: 10px; }
   .tab .cnt { display: none; }
@@ -143,6 +173,7 @@
   </div>
 
   <div class="tabs" id="tabs"></div>
+  <div class="breadcrumb" id="breadcrumb"></div>
   <div class="quality-bar" id="quality"></div>
   <div class="toolbar" id="toolbar"></div>
   <div class="stats-bar" id="stats"></div>
@@ -165,6 +196,9 @@ let page = 0;
 let searchVal = '';
 let filterVal = '';
 
+// Drill-down state
+let drill = { league: null, club: null }; // { league: {code,name}, club: {id,name} }
+
 // ── Table definitions ───────────────────────────────────────────────────
 
 const TABLES = {
@@ -182,6 +216,7 @@ const TABLES = {
       { key:'season_span_months', label:'Span' },
     ],
     searchKeys: ['name','espn_code','category'],
+    rowClick: r => drillToLeague(r.espn_code, r.name),
   },
   seasons: {
     query: 'seasons?select=*,leagues(name,espn_code)&order=league_id,start_date',
@@ -209,6 +244,7 @@ const TABLES = {
       { key:'roster_updated_at', label:'Roster Updated', fmt: v => v ? v.slice(0,10) : '', cls: v => v ? 'dim' : 'warn-cell' },
     ],
     searchKeys: ['name','short_name','league_espn_code'],
+    rowClick: r => drillToClub(r.id, r.name, r.league_espn_code),
     quality: data => {
       const noRoster = data.filter(r => !r.roster_updated_at).length;
       return noRoster ? [{ label:`${noRoster} never fetched`, cls:'q-warn', filter: r => !r.roster_updated_at }] : [];
@@ -385,6 +421,18 @@ function getFiltered(data) {
   const def = TABLES[activeTab];
   let filtered = data;
 
+  // Drill-down filters
+  if (drill.league) {
+    if (activeTab === 'clubs') {
+      filtered = filtered.filter(r => r.league_espn_code === drill.league.code);
+    }
+  }
+  if (drill.club) {
+    if (activeTab === 'players') {
+      filtered = filtered.filter(r => r.current_club_id === drill.club.id);
+    }
+  }
+
   // Quality filter
   const qEl = document.getElementById('quality');
   if (activeQualityFilter !== null && qEl._alerts && qEl._alerts[activeQualityFilter]) {
@@ -454,8 +502,11 @@ function render() {
   if (!pageData.length) {
     tbody.innerHTML = `<tr><td colspan="${def.cols.length}" style="text-align:center;color:var(--dim);padding:24px">No data</td></tr>`;
   } else {
-    tbody.innerHTML = pageData.map(row => {
-      return '<tr>' + def.cols.map(c => {
+    // Store for click handlers
+    tbody._pageData = pageData;
+    tbody.innerHTML = pageData.map((row, ri) => {
+      const clickAttr = def.rowClick ? ` class="clickable" onclick="handleRowClick(${ri})"` : '';
+      return `<tr${clickAttr}>` + def.cols.map(c => {
         const raw = c.get ? c.get(row) : row[c.key];
         const display = c.fmt ? c.fmt(raw) : (raw === null || raw === undefined ? '' : raw);
         const isWarn = c.warn && c.warn(row);
@@ -492,6 +543,80 @@ function render() {
   }
 }
 
+// ── Drill-down ──────────────────────────────────────────────────────────
+
+async function drillToLeague(code, name) {
+  drill = { league: { code, name }, club: null };
+  activeTab = 'clubs'; sortCol = null; sortAsc = true;
+  page = 0; searchVal = ''; activeQualityFilter = null;
+  renderTabs(); renderToolbar(); renderBreadcrumb();
+  const data = await loadTable('clubs');
+  renderQuality(data);
+  render();
+}
+
+async function drillToClub(id, name, leagueCode) {
+  if (!drill.league && leagueCode) {
+    const leagueName = (cache.leagues || []).find(l => l.espn_code === leagueCode)?.name || leagueCode;
+    drill.league = { code: leagueCode, name: leagueName };
+  }
+  drill.club = { id, name };
+  activeTab = 'players'; sortCol = null; sortAsc = true;
+  page = 0; searchVal = ''; activeQualityFilter = null;
+  renderTabs(); renderToolbar(); renderBreadcrumb();
+  const data = await loadTable('players');
+  renderQuality(data);
+  render();
+}
+
+function drillClear() {
+  drill = { league: null, club: null };
+  switchTab(activeTab);
+}
+
+function drillBackToLeagues() {
+  drill = { league: null, club: null };
+  switchTab('leagues');
+}
+
+function drillBackToClubs() {
+  drill.club = null;
+  activeTab = 'clubs'; sortCol = null; sortAsc = true;
+  page = 0; searchVal = ''; activeQualityFilter = null;
+  renderTabs(); renderToolbar(); renderBreadcrumb();
+  const data = cache['clubs'] || [];
+  renderQuality(data);
+  render();
+}
+
+function renderBreadcrumb() {
+  const el = document.getElementById('breadcrumb');
+  if (!drill.league && !drill.club) { el.innerHTML = ''; return; }
+  let html = '';
+  if (drill.league) {
+    if (drill.club) {
+      html += `<span class="bc-item" onclick="drillBackToLeagues()">Leagues</span>`;
+      html += `<span class="bc-sep">›</span>`;
+      html += `<span class="bc-item" onclick="drillBackToClubs()">${drill.league.name}</span>`;
+      html += `<span class="bc-sep">›</span>`;
+      html += `<span class="bc-current">${drill.club.name}</span>`;
+    } else {
+      html += `<span class="bc-item" onclick="drillBackToLeagues()">Leagues</span>`;
+      html += `<span class="bc-sep">›</span>`;
+      html += `<span class="bc-current">${drill.league.name}</span>`;
+    }
+  }
+  html += `<span class="bc-clear" onclick="drillClear()">✕ Clear</span>`;
+  el.innerHTML = html;
+}
+
+function handleRowClick(idx) {
+  const tbody = document.getElementById('tbody');
+  const row = tbody._pageData && tbody._pageData[idx];
+  const def = TABLES[activeTab];
+  if (row && def.rowClick) def.rowClick(row);
+}
+
 function doSort(col) {
   if (sortCol === col) sortAsc = !sortAsc;
   else { sortCol = col; sortAsc = true; }
@@ -503,8 +628,15 @@ async function switchTab(name) {
   sortCol = null; sortAsc = true;
   page = 0; searchVal = '';
   activeQualityFilter = null;
+  // Clear drill-down when switching tabs manually
+  if (name === 'leagues' || (name !== 'clubs' && name !== 'players')) {
+    drill = { league: null, club: null };
+  } else if (name === 'clubs') {
+    drill.club = null;
+  }
   renderTabs();
   renderToolbar();
+  renderBreadcrumb();
   const data = await loadTable(name);
   renderQuality(data);
   render();
