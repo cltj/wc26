@@ -83,6 +83,28 @@
         <div class="sync-log" id="sync-log"></div>
       </div>
 
+      <!-- Player Sync -->
+      <div class="admin-box">
+        <div class="admin-label">🧑‍🤝‍🧑 Player Sync</div>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:12px">
+          Fetches club rosters from ESPN and updates player data (name, DOB, height, weight, position, club, nationality). Processes 30 stale clubs per click.
+        </p>
+        <div class="admin-row">
+          <button class="btn btn-green" id="psync-btn" onclick="runPlayerSync()">Sync Players</button>
+          <select class="inp" id="psync-league" style="font-size:12px;padding:6px 8px">
+            <option value="">All leagues</option>
+            <option value="ENG.1">Premier League</option>
+            <option value="ESP.1">La Liga</option>
+            <option value="GER.1">Bundesliga</option>
+            <option value="ITA.1">Serie A</option>
+            <option value="FRA.1">Ligue 1</option>
+            <option value="NOR.1">Eliteserien</option>
+          </select>
+          <span id="psync-status" style="font-size:12px;color:var(--dim)"></span>
+        </div>
+        <div class="sync-log" id="psync-log" style="display:none;max-height:200px;overflow-y:auto;margin-top:8px;font-size:11px;font-family:var(--mono);background:rgba(0,0,0,.2);border-radius:6px;padding:8px;white-space:pre-wrap"></div>
+      </div>
+
       <!-- Manual JSON sync -->
       <div class="admin-box">
         <div class="admin-label">Manual JSON Sync</div>
@@ -287,6 +309,45 @@ async function runManualSync(){
     msg.textContent='✓ Applied!'; msg.style.color='var(--green)';
     setTimeout(()=>msg.textContent='',3000);
   }catch(e){msg.textContent='Invalid JSON: '+e.message;msg.style.color='#e07070';}
+}
+
+// ── Player Sync ──────────────────────────────────────────────────────────────
+async function runPlayerSync() {
+  const btn = document.getElementById('psync-btn');
+  const status = document.getElementById('psync-status');
+  const logEl = document.getElementById('psync-log');
+  const league = document.getElementById('psync-league').value;
+
+  btn.disabled = true; btn.textContent = '⏳ Syncing…';
+  logEl.style.display = 'block';
+  logEl.textContent = 'Calling sync-players edge function…\n';
+
+  try {
+    const body = { limit: 30 };
+    if (league) body.league = league;
+
+    const res = await fetch(`${SB_URL}/functions/v1/sync-players`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SB_SVC_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.log) data.log.forEach(msg => logEl.textContent += msg + '\n');
+
+    if (data.ok) {
+      status.innerHTML = `<span style="color:var(--green)">✓ ${data.players} players from ${data.clubs} clubs</span>`;
+    } else {
+      throw new Error(data.error || 'Sync failed');
+    }
+  } catch(e) {
+    logEl.textContent += '✗ ' + e.message + '\n';
+    status.innerHTML = `<span style="color:#e07070">Failed: ${e.message}</span>`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sync Players';
+  }
 }
 
 // ── Sync History ──────────────────────────────────────────────────────────────
