@@ -731,7 +731,7 @@ Deno.serve(async (req) => {
               last_formation: lu.formation,
               last_starting_xi: lu.starters,
               last_substitutes: lu.substitutes,
-            }).eq('team_id', teamRow.id).eq('tournament', 'WC 2026')
+            }).eq('team_id', teamRow.id).eq('tournament', 'FIFA.WORLD')
           }
         }
 
@@ -927,7 +927,7 @@ Deno.serve(async (req) => {
       // Join teams_helper with national_teams to get name + group_letter
       const { data: ttRows } = await supabase.from('teams_helper')
         .select('group_letter,national_teams(name)')
-        .eq('tournament', 'WC 2026')
+        .eq('tournament', 'FIFA.WORLD')
         .order('group_letter')
       const teams = (ttRows || []).map((r: any) => ({ name: r.national_teams.name, group_letter: r.group_letter }))
       const { data: sched } = await supabase.from('schedule').select('home_team,away_team,home_score,away_score,status,group_name').order('id')

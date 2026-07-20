@@ -74,7 +74,7 @@ async function verifyPin(name, pin) {
 
 // ── Tournament teams helper ──────────────────────────────────────────────────
 // Fetches teams_helper joined with national_teams, returns flat array
-async function loadTournamentTeams(tournament = 'WC 2026') {
+async function loadTournamentTeams(tournament = 'FIFA.WORLD') {
   const rows = await sb(`teams_helper?select=team_id,group_letter,eliminated,last_formation,last_starting_xi,last_substitutes,national_teams(id,name,flag_emoji,confederation)&tournament=eq.${encodeURIComponent(tournament)}&order=group_letter`);
   return rows.map(r => ({
     id: r.national_teams.id,
