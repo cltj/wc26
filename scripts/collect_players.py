@@ -280,8 +280,8 @@ def collect(args):
                     'updated_at': now.isoformat(),
                 }
 
-                # Only update current_club_id for current season fetches
-                if not is_historical:
+                # Update current_club_id for current season or if --update-clubs
+                if not is_historical or args.update_clubs:
                     row['current_club_id'] = club_id
 
                 player_rows.append(row)
@@ -392,5 +392,6 @@ if __name__ == '__main__':
     parser.add_argument('--freshness', type=int, default=24, help='Re-fetch if older than N hours (default: 24)')
     parser.add_argument('--all', action='store_true', help='Ignore freshness, fetch everything')
     parser.add_argument('--season', type=int, help='ESPN season year (e.g. 2023 for 2023-24). Skips freshness and transfer detection.')
+    parser.add_argument('--update-clubs', action='store_true', help='Update current_club_id even in historical mode')
     args = parser.parse_args()
     collect(args)

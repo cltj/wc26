@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION generate_seasons(from_year int DEFAULT 2020, to_year int DEFAULT 2030)
+CREATE OR REPLACE FUNCTION generate_seasons(from_year int DEFAULT 2020, to_year int DEFAULT 2026)
 RETURNS TABLE(league_id bigint, label text, start_date date, end_date date, is_current boolean)
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -31,7 +31,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION ensure_seasons(from_year int DEFAULT 2020, to_year int DEFAULT 2030)
+CREATE OR REPLACE FUNCTION ensure_seasons(from_year int DEFAULT 2020, to_year int DEFAULT 2026)
 RETURNS int
 LANGUAGE plpgsql AS $$
 DECLARE
